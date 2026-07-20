@@ -2,6 +2,8 @@ package com.sbancuz.plannh.gui;
 
 import net.minecraft.client.Minecraft;
 
+import org.apache.commons.lang3.StringUtils;
+
 import com.cleanroommc.modularui.drawable.GuiDraw;
 
 public final class GuiHelper {
@@ -22,6 +24,24 @@ public final class GuiHelper {
             return String.valueOf(rounded);
         }
         return String.format("%.2f", count);
+    }
+
+    public static String trimTrailingZeros(final String s) {
+        if (s.indexOf('.') < 0 && s.indexOf(',') < 0) return s;
+        return StringUtils.stripEnd(StringUtils.stripEnd(s, "0"), ".,");
+    }
+
+    /**
+     * Rate display, the single authority for per-second amounts: compact above a thousand,
+     * two decimals down to 1, five below - fractional machine counts routinely produce
+     * trickle rates that fewer digits would round to an all-zero line.
+     */
+    public static String formatRate(final float rate) {
+        if (rate >= 1000000000f) return String.format("%.1fB", rate / 1000000000f);
+        if (rate >= 1000000f) return String.format("%.1fM", rate / 1000000f);
+        if (rate >= 1000f) return String.format("%.0f", rate);
+        if (rate >= 1f) return String.format("%.2f", rate);
+        return trimTrailingZeros(String.format("%.5f", rate));
     }
 
     public static void drawRectBorder(final int x, final int y, final int w, final int h, final int bw,

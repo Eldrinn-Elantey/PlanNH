@@ -102,15 +102,18 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
         }
 
         // Net by resource: output = max(0, prod - cons), input = max(0, cons - prod).
+        // Relative tolerance: solver flows arrive as float sums, so a fully recycled
+        // resource can miss exact equality and would show as a tiny junk line.
         final Map<LineKey, Float> netInputs = new HashMap<>();
         for (final var entry : inputMap.entrySet()) {
             final LineKey key = entry.getKey();
             final float cons = entry.getValue();
             final float prod = outputMap.getOrDefault(key, 0f);
-            if (cons > prod) {
-                netInputs.put(key, cons - prod);
+            final float eps = Math.max(prod, cons) * 1e-4f;
+            if (Math.abs(cons - prod) <= eps) {
                 outputMap.remove(key);
-            } else if (cons == prod) {
+            } else if (cons > prod) {
+                netInputs.put(key, cons - prod);
                 outputMap.remove(key);
             } else {
                 outputMap.put(key, prod - cons);

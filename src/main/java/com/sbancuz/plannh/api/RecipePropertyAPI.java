@@ -20,6 +20,7 @@ import com.sbancuz.plannh.data.PropertyProvider;
 import com.sbancuz.plannh.data.RecipeProperty;
 import com.sbancuz.plannh.data.RecipeResource;
 import com.sbancuz.plannh.data.provider.gregtech.GTHooks;
+import com.sbancuz.plannh.gui.GuiHelper;
 import com.sbancuz.plannh.gui.IngredientColors;
 import com.sbancuz.plannh.gui.PlannhColors;
 
@@ -32,13 +33,7 @@ public final class RecipePropertyAPI {
 
     public static final RecipeResource<ItemStack> ITEM = RecipeResource.builder("item", new ItemStack(Blocks.dirt))
         .displayFormatter(ItemStack::getDisplayName)
-        .amountFormatter((rate) -> {
-            if (rate >= 1000000000f) return String.format("%.1fB", rate / 1000000000f);
-            if (rate >= 1000000f) return String.format("%.1fM", rate / 1000000f);
-            if (rate >= 1000f) return String.format("%.0f", rate);
-            if (rate >= 1f) return String.format("%.2f", rate);
-            return String.format("%.3f", rate);
-        })
+        .amountFormatter(GuiHelper::formatRate)
         .amountExtractor(stack -> stack.stackSize)
         .amountUpdater((stack, newAmount) -> stack.stackSize = newAmount)
         .connectionChecker(RecipePropertyAPI::itemsMatch)
@@ -56,8 +51,8 @@ public final class RecipePropertyAPI {
         .<FluidStack>builder("fluid", new FluidStack(FluidRegistry.WATER, 0, null))
         .displayFormatter(FluidStack::getLocalizedName)
         .amountFormatter(amount -> {
-            final int mB = Math.round(amount);
-            return mB >= 1000 ? String.format("%.1fB", mB / 1000f) : mB + "mB";
+            if (amount >= 1000f) return String.format("%.1fB", amount / 1000f);
+            return GuiHelper.trimTrailingZeros(GuiHelper.formatRate(amount)) + "mB";
         })
         .amountExtractor(fs -> fs.amount)
         .amountUpdater((fs, newAmount) -> fs.amount = newAmount)

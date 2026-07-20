@@ -411,6 +411,32 @@ public class FlowchartScreen extends ModularScreen {
             return h;
         }
 
+        /**
+         * Products/inputs whose amount survives display rounding: netting float residue would
+         * otherwise print as a "0mB/s" line.
+         */
+        private Summary displayedSummary(final Summary s, final BalanceResult br) {
+            final boolean isCycle = summaryMode() == SummaryMode.CYCLES;
+            final float cycleSecs = summaryCycleSecs(br);
+            return new Summary(
+                visibleLines(s.outputs(), cycleSecs, isCycle),
+                visibleLines(s.inputs(), cycleSecs, isCycle),
+                s.properties());
+        }
+
+        private static List<Summary.Line<?>> visibleLines(final List<Summary.Line<?>> items, final float cycleSecs,
+            final boolean isCycle) {
+            final List<Summary.Line<?>> kept = new ArrayList<>();
+            for (final var item : items) {
+                final float shown = isCycle ? item.amount() : item.amount() / cycleSecs;
+                if (!item.displayAmount(shown)
+                    .matches("0([.,]0+)?\\p{Alpha}*")) {
+                    kept.add(item);
+                }
+            }
+            return kept;
+        }
+
         /** Solver notes, word-wrapped to the summary width at the item text scale. */
         private static List<String> wrapNotes(final List<String> notes) {
             final List<String> lines = new ArrayList<>();
@@ -443,8 +469,8 @@ public class FlowchartScreen extends ModularScreen {
             if (collapsed) return;
 
             final Graph g = graph();
-            final Summary s = g.summary();
             final BalanceResult br = g.balance();
+            final Summary s = displayedSummary(g.summary(), br);
             size(WIDTH, computeHeight(s, br));
             final SummaryMode sMode = summaryMode();
             final float cycleSecs = summaryCycleSecs(br);
@@ -639,8 +665,8 @@ public class FlowchartScreen extends ModularScreen {
                 PlanAPI.getSlotSet().summaryCollapsed = collapsed;
                 PlanAPI.save();
                 final Graph g = graph();
-                final Summary s = g.summary();
-                size(WIDTH, computeHeight(s, g.balance()));
+                final BalanceResult br = g.balance();
+                size(WIDTH, computeHeight(displayedSummary(g.summary(), br), br));
                 return Result.SUCCESS;
             }
 

@@ -487,7 +487,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         if (port.getType() == RecipePropertyAPI.ITEM) {
             final ItemStack stack = (ItemStack) port.getValue();
             final float total = effectiveTotal(nb, index, output, stack.stackSize);
-            String label = formatRate(total / sec) + "/s " + stack.getDisplayName();
+            String label = GuiHelper.formatRate(total / sec) + "/s " + stack.getDisplayName();
             if (output && port.getChance() < 0.999f) {
                 label += " (" + Math.round(port.getChance() * 100) + "%)";
             }
@@ -498,7 +498,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
             // Both directions read the balance's effective totals: recomputing outputs from the
             // operation count showed rounded rates next to exact input rates on the same node.
             final float total = effectiveTotal(nb, index, output, fs.amount);
-            return formatRate(total / sec) + "/s " + fs.getLocalizedName();
+            return GuiHelper.formatRate(total / sec) + "/s " + fs.getLocalizedName();
         }
         return null;
     }
@@ -515,13 +515,6 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
             return output ? PlannhColors.ACCENT_CYAN.getColor() : PlannhColors.ACCENT_BLUE3.getColor();
         }
         return output ? PlannhColors.ACCENT_YELLOW.getColor() : PlannhColors.TEXT_MUTED.getColor();
-    }
-
-    private static String formatRate(final float rate) {
-        if (rate >= 1000000) return String.format("%.1fM", rate / 1000000);
-        if (rate >= 1000) return String.format("%.0f", rate);
-        if (rate >= 1) return String.format("%.2f", rate);
-        return String.format("%.3f", rate);
     }
 
     @Override
