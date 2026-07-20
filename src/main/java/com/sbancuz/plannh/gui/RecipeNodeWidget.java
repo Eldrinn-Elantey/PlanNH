@@ -190,7 +190,12 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         return lines * LINE_H + 6;
     }
 
-    private void ensureRecipeHandler() {
+    /**
+     * Loads the NEI handler that determines this widget's real size. Lazy - normally first
+     * draw does it, but MUI2 culls off-viewport widgets, so anything measuring node sizes
+     * (auto-layout) must call this first or off-screen nodes report stub dimensions.
+     */
+    void ensureRecipeHandler() {
         if (handlerRef != null || handlerInitFailed) return;
 
         final RecipeHandlerRef ref = RecipeHandlerRef.of(node.recipeId);
@@ -318,13 +323,17 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
                 false);
 
             final NodeBalance simpleNb = getNodeBalance();
-            final int simpleOps = simpleNb != null ? simpleNb.operations() : 1;
+            final double simpleOps = simpleNb != null ? simpleNb.operations() : 1;
             final int simpleDurPerOp = simpleNb != null ? simpleNb.durationPerOp() : node.durationTicks;
             final StringBuilder simpleTiming = new StringBuilder();
-            simpleTiming.append("\u00d7").append(simpleOps);
+            // No balance (unpinned Auto): the chart is just wiring, so no count is shown.
+            if (simpleOps > 0) {
+                simpleTiming.append("\u00d7")
+                    .append(GuiHelper.formatCount(simpleOps));
+            }
             if (simpleDurPerOp > 0) {
-                simpleTiming.append("  ")
-                    .append(simpleDurPerOp)
+                if (!simpleTiming.isEmpty()) simpleTiming.append("  ");
+                simpleTiming.append(simpleDurPerOp)
                     .append("t (")
                     .append(String.format("%.1f", (float) simpleDurPerOp / GuiHelper.TICKS_PER_SECOND))
                     .append("s)");
@@ -433,33 +442,37 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         final float sec = nb != null && nb.totalDurationTicks() > 0
             ? (float) nb.totalDurationTicks() / GuiHelper.TICKS_PER_SECOND
             : node.durationTicks > 0 ? (float) node.durationTicks / GuiHelper.TICKS_PER_SECOND : 1f;
-        final int ops = nb != null ? nb.operations() : 1;
-        final int throughput = nb != null ? node.machineConfig.computeEffect(node.properties, node.durationTicks)
-            .throughputFactor() : 1;
+        final double ops = nb != null ? nb.operations() : 1;
 
         final int durPerOp = nb != null ? nb.durationPerOp() : node.durationTicks;
         final StringBuilder opsLine = new StringBuilder();
-        opsLine.append("\u00d7")
-            .append(ops);
+        // No balance (unpinned Auto): show the recipe duration only - no count, and below, no
+        // throughput rows. An unpinned chart is wiring, not a solved plan; per-machine rates
+        // would be numbers with no anchor.
+        if (ops > 0) {
+            opsLine.append("\u00d7")
+                .append(GuiHelper.formatCount(ops));
+        }
         if (durPerOp > 0) {
-            opsLine.append("  ")
-                .append(durPerOp)
+            if (!opsLine.isEmpty()) opsLine.append("  ");
+            opsLine.append(durPerOp)
                 .append("t (")
                 .append(String.format("%.2f", (float) durPerOp / GuiHelper.TICKS_PER_SECOND))
                 .append("s)");
         }
         GuiDraw.drawText(opsLine.toString(), x, y, 1.0f, PlannhColors.ACCENT_BLUE.getColor(), false);
         y += LINE_H;
+        if (ops <= 0) return;
 
-        y = drawPortList(x, y, node.inputs, nb, sec, ops, throughput, false);
-        drawPortList(x, y, node.outputs, nb, sec, ops, throughput, true);
+        y = drawPortList(x, y, node.inputs, nb, sec, false);
+        drawPortList(x, y, node.outputs, nb, sec, true);
     }
 
     private int drawPortList(final int x, int y, final List<Port<?>> ports, final NodeBalance nb, final float sec,
-        final int ops, final int throughput, final boolean output) {
+        final boolean output) {
         for (int i = 0; i < ports.size(); i++) {
             final Port<?> port = ports.get(i);
-            final String label = portLabel(port, i, nb, sec, ops, throughput, output);
+            final String label = portLabel(port, i, nb, sec, output);
             if (label == null) continue;
             GuiDraw.drawText(label, x + (output ? LIST_INDENT : 0), y, 1.0f, portColor(port, output), false);
             y += LINE_H;
@@ -468,17 +481,12 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
     }
 
     @Nullable
-    private String portLabel(final Port<?> port, final int index, final NodeBalance nb, final float sec, final int ops,
-        final int throughput, final boolean output) {
+    private String portLabel(final Port<?> port, final int index, final NodeBalance nb, final float sec,
+        final boolean output) {
         if (!hasVisibleAmount(port)) return null;
         if (port.getType() == RecipePropertyAPI.ITEM) {
             final ItemStack stack = (ItemStack) port.getValue();
-            final float total = (output ? nb.effectiveOutputs() : nb.effectiveInputs()).containsKey(index) ? output
-                ? nb.effectiveOutputs()
-                    .get(index)
-                : nb.effectiveInputs()
-                    .get(index)
-                : stack.stackSize;
+            final float total = effectiveTotal(nb, index, output, stack.stackSize);
             String label = formatRate(total / sec) + "/s " + stack.getDisplayName();
             if (output && port.getChance() < 0.999f) {
                 label += " (" + Math.round(port.getChance() * 100) + "%)";
@@ -487,19 +495,19 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         }
         if (port.getType() == RecipePropertyAPI.FLUID) {
             final FluidStack fs = (FluidStack) port.getValue();
-            final float total;
-            if (output) {
-                total = ops * (float) fs.amount * port.getChance() * throughput;
-            } else {
-                total = nb.effectiveInputs()
-                    .containsKey(index)
-                        ? nb.effectiveInputs()
-                            .get(index)
-                        : (float) fs.amount;
-            }
+            // Both directions read the balance's effective totals: recomputing outputs from the
+            // operation count showed rounded rates next to exact input rates on the same node.
+            final float total = effectiveTotal(nb, index, output, fs.amount);
             return formatRate(total / sec) + "/s " + fs.getLocalizedName();
         }
         return null;
+    }
+
+    private static float effectiveTotal(final NodeBalance nb, final int index, final boolean output,
+        final float fallbackPerOp) {
+        final var effective = output ? nb.effectiveOutputs() : nb.effectiveInputs();
+        final Float total = effective.get(index);
+        return total != null ? total : fallbackPerOp;
     }
 
     private static int portColor(final Port<?> port, final boolean output) {
