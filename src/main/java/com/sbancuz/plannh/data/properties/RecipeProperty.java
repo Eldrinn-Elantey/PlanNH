@@ -1,4 +1,4 @@
-package com.sbancuz.plannh.data;
+package com.sbancuz.plannh.data.properties;
 
 import java.util.Objects;
 import java.util.function.Function;
@@ -19,8 +19,6 @@ public class RecipeProperty<T> {
 
     @lombok.Builder.Default
     private final Function<T, String> displayFormatter = null;
-    @lombok.Builder.Default
-    private final Function<Float, String> amountFormatter = Objects::toString;
 
     public String displayName() {
         return StatCollector.translateToLocal("plannh.properties." + key);
@@ -29,10 +27,6 @@ public class RecipeProperty<T> {
     public String formatDisplayName(final T value) {
         if (displayFormatter == null) return displayName();
         return displayFormatter.apply(value);
-    }
-
-    public String formatAmount(final float value) {
-        return amountFormatter.apply(value);
     }
 
     public static <B> RecipePropertyBuilder<B, ?, ?> builder(final String key, final B defaultValue) {
