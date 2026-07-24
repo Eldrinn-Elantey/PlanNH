@@ -8,6 +8,7 @@ import javax.annotation.Nonnull;
 public enum Settings {
 
     // ── int settings ──
+    DURATION_TICKS("duration_ticks", 0, 0, 1000000, (v, c) -> v > 0 ? v + "t" : null),
     AMP("amp", 1, 1, 64, (v, c) -> "A" + v),
     SPEED("speed", 100, 10, 10000, (v, c) -> "\u23F1" + v + "%"),
     TICK_MODIFIER("tick_modifier", 100, 10, 10000, (v, c) -> "\u23E9" + v + "%"),
@@ -32,6 +33,7 @@ public enum Settings {
     VIS_PER_TICK("vis_per_tick", 1, 1, 100),
     RF_PER_TICK("rf_per_tick", 80, 1, 10000),
     FORESTRY_RF_PER_TICK("forestry_rf_per_tick", 10, 1, 10000),
+    INPUTS_PER_TICK("inputs_per_tick", 1, 1, 10000),
 
     // ── bool settings ──
     PERFECT_OC("perfect_oc", false, (v, c) -> v ? "P" : null),
@@ -40,6 +42,8 @@ public enum Settings {
     LASER_OC("laser_oc", false, (v, c) -> v ? "L" : null),
     UNLIMITED_SKIPS("unlimited_skips", false, (v, c) -> v ? "\u221ET" : null),
     NO_OVERCLOCK("no_overclock", false, (v, c) -> v ? "NO" : null),
+    GT_MULTIBLOCK("gt_multiblock", false, (v, c) -> v ? "M" : null),
+    CATALYST("catalyst", 0, 0, 8637, (v, c) -> v > 0 ? "\u2606" + v : null),
 
     // ── enum-type settings ──
     VOLTAGE("voltage", "OFF", List

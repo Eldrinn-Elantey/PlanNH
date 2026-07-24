@@ -21,6 +21,7 @@ import com.cleanroommc.modularui.widget.Widget;
 import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
+import com.sbancuz.plannh.data.RecipeContext;
 import com.sbancuz.plannh.data.SettingDef;
 import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
 import com.sbancuz.plannh.data.flowchart.Balancer.NodeBalance;
@@ -314,7 +315,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
 
             final NodeBalance simpleNb = getNodeBalance();
             final int simpleOps = simpleNb != null ? simpleNb.operations : 1;
-            final int simpleDurPerOp = simpleNb != null ? simpleNb.durationPerOp : node.durationTicks;
+            final int simpleDurPerOp = simpleNb != null ? simpleNb.durationPerOp : node.getRecipeDuration();
             final StringBuilder simpleTiming = new StringBuilder();
             simpleTiming.append("\u00d7").append(simpleOps);
             if (simpleDurPerOp > 0) {
@@ -445,12 +446,12 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         final NodeBalance nb = getNodeBalance();
         final float sec = nb != null && nb.totalDurationTicks > 0
             ? (float) nb.totalDurationTicks / GuiHelper.TICKS_PER_SECOND
-            : node.durationTicks > 0 ? (float) node.durationTicks / GuiHelper.TICKS_PER_SECOND : 1f;
+            : node.getRecipeDuration() > 0 ? (float) node.getRecipeDuration() / GuiHelper.TICKS_PER_SECOND : 1f;
         final int ops = nb != null ? nb.operations : 1;
-        final int throughput = nb != null ? node.machineConfig.computeEffect(node.properties, node.durationTicks)
+        final int throughput = nb != null ? node.machineConfig.computeEffect(node.properties)
             .throughputFactor() : 1;
 
-        final int durPerOp = nb != null ? nb.durationPerOp : node.durationTicks;
+        final int durPerOp = nb != null ? nb.durationPerOp : node.getRecipeDuration();
         final StringBuilder opsLine = new StringBuilder();
         opsLine.append("\u00d7")
             .append(ops);
@@ -611,7 +612,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         final MachineProfile profile = c.getProfile();
         final StringBuilder sb = new StringBuilder();
 
-        for (final SettingDef<?> def : profile.settings()) {
+        for (final SettingDef<?> def : profile.visibleSettings(new RecipeContext(node.properties), c.settings)) {
             final Object val = c.settings.get(def.key);
             if (val == null) continue;
             if (val.equals(def.defaultValue)) continue;
@@ -633,7 +634,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         final int x = LEFT_CONTENT_X;
         final int y0 = CONTENT_TOP + neiWidget.h + THROUGHPUT_GAP + calcInfoHeight();
         final MachineProfile profile = node.machineConfig.getProfile();
-        int panelH = profile.settings()
+        int panelH = profile.visibleSettings(new RecipeContext(node.properties), node.machineConfig.settings)
             .size() * LINE_H + 4;
         if (node.getAvailableExtractors()
             .size() > 1) panelH += LINE_H;
@@ -647,8 +648,9 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         final MachineConfig c = node.machineConfig;
         int y = y0;
 
-        for (final SettingDef<?> def : profile.settings()) {
-            y = drawSetting(x, y, def, c);
+        final RecipeContext ctx = new RecipeContext(node.properties);
+        for (final SettingDef<?> def : profile.visibleSettings(ctx, c.settings)) {
+            y = drawSetting(x, y, ctx, def, c);
         }
 
         if (node.getAvailableExtractors()
@@ -663,15 +665,23 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         }
     }
 
-    private int drawSetting(final int x, final int y, final SettingDef<?> def, final MachineConfig c) {
+    private int drawSetting(final int x, final int y, final RecipeContext ctx, final SettingDef<?> def,
+        final MachineConfig c) {
         if (def.type == Integer.class) {
-            return drawConfigIntField(x, y, def.label, c.getInt(def.key), def.minInt, def.maxInt, v -> {
-                c.setInt(def.key, v);
-                onConfigChanged();
-            });
+            return drawConfigIntField(
+                x,
+                y,
+                def.label(ctx, c.settings),
+                c.getInt(def.key),
+                def.minInt,
+                def.maxInt,
+                v -> {
+                    c.setInt(def.key, v);
+                    onConfigChanged();
+                });
         } else if (def.type == Boolean.class) {
             final boolean val = c.getBoolean(def.key);
-            final String label = (val ? "[\u2713] " : "[  ] ") + def.label;
+            final String label = (val ? "[\u2713] " : "[  ] ") + def.label(ctx, c.settings);
             GuiDraw.drawText(
                 label,
                 x,
@@ -686,7 +696,13 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
             return y + LINE_H;
         } else if (def.type == String.class && def.hasOptions()) {
             final String val = c.getString(def.key);
-            GuiDraw.drawText(def.label + " " + val, x, y, 1.0f, PlannhColors.SETTING_ON.getColor(), false);
+            GuiDraw.drawText(
+                def.label(ctx, c.settings) + " " + val,
+                x,
+                y,
+                1.0f,
+                PlannhColors.SETTING_ON.getColor(),
+                false);
 
             final int decX = x + SETTING_DEC_X;
             final int incX = decX + SETTING_BTN_W;
@@ -713,11 +729,8 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
     private int computeConfigPanelHeight() {
         if (!configOpen) return 0;
         final MachineProfile profile = node.machineConfig.getProfile();
-        int h = profile.settings()
+        return profile.visibleSettings(new RecipeContext(node.properties), node.machineConfig.settings)
             .size() * LINE_H + 8;
-        if (node.getAvailableExtractors()
-            .size() > 1) h += LINE_H;
-        return h;
     }
 
     private int drawConfigIntField(final int x, final int y, final String label, final int value, final int min,
