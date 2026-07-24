@@ -1,6 +1,5 @@
 package com.sbancuz.plannh.data.provider;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
@@ -11,55 +10,53 @@ import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.effect.Effects;
+import com.sbancuz.plannh.data.effect.steps.RFEffectStep;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
 
-import codechicken.nei.recipe.FurnaceRecipeHandler;
 import codechicken.nei.recipe.IRecipeHandler;
+import micdoodle8.mods.galacticraft.core.nei.CircuitFabricatorRecipeHandler;
+import micdoodle8.mods.galacticraft.core.nei.RefineryRecipeHandler;
 
-public class VanillaProvider implements PropertyProvider {
+public final class GalacticraftProvider implements PropertyProvider {
 
-    // Vanilla furnace: base cook time of 200 ticks (10 seconds)
-    // Matches net.minecraft.tileentity.TileEntityFurnace.furnaceCookTime
-    private static final int FURNACE_COOK_TICKS = 200;
+    private static final String PROFILE_ID = "gc:basic";
 
     @Override
     public void register() {
-        RecipePropertyAPI.registerExtractor(FurnaceRecipeHandler.class, this);
+        RecipePropertyAPI.registerExtractor(RefineryRecipeHandler.class, this);
+        RecipePropertyAPI.registerExtractor(CircuitFabricatorRecipeHandler.class, this);
+
         MachineProfileRegistry.register(
-            MachineProfile.builder("minecraft", "Default")
+            MachineProfile.builder(PROFILE_ID, "Galacticraft")
                 .setting(Settings.MACHINES.def())
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromHandler()
-                        .andThen(Effects.clearEnergy())
+                        .andThen(Effects.amortizeEnergy(RFEffectStep.RF_COST))
                         .andThen(Effects.applyParallelism()))
                 .build());
+    }
+
+    @Override
+    public boolean canCraft(final IRecipeHandler handler, final int recipeIndex) {
+        return getProfileId(handler, recipeIndex) != null;
     }
 
     @Override
     @Nullable
     public String getProfileId(final IRecipeHandler handler, final int recipeIndex) {
         return switch (handler) {
-            case FurnaceRecipeHandler _ -> MachineProfileRegistry.defaultId();
+            case RefineryRecipeHandler _, CircuitFabricatorRecipeHandler _ -> PROFILE_ID;
             default -> null;
         };
-    }
-
-    @Override
-    public boolean canCraft(final IRecipeHandler handler, final int recipeIndex) {
-        return handler instanceof FurnaceRecipeHandler fh && "crafting.furnace".equals(fh.getOverlayIdentifier());
     }
 
     @Override
     @Nonnull
     public Map<RecipeProperty<?>, Object> extract(final Node node, final IRecipeHandler handler,
         final int recipeIndex) {
-        final Map<RecipeProperty<?>, Object> props = new HashMap<>(
-            PropertyProvider.super.extract(node, handler, recipeIndex));
-        if (!(handler instanceof FurnaceRecipeHandler)) return props;
-        props.put(RecipePropertyAPI.DURATION_TICKS, FURNACE_COOK_TICKS);
-        return props;
+        return PropertyProvider.super.extract(node, handler, recipeIndex);
     }
 }

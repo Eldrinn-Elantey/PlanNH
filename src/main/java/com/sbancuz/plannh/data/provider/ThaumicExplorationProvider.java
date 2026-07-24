@@ -10,46 +10,43 @@ import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.Settings;
-import com.sbancuz.plannh.data.effect.Effects;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
 
-import codechicken.nei.recipe.FurnaceRecipeHandler;
 import codechicken.nei.recipe.IRecipeHandler;
+import flaxbeard.thaumicexploration.integration.nei.ReplicatorHandler;
 
-public class VanillaProvider implements PropertyProvider {
-
-    // Vanilla furnace: base cook time of 200 ticks (10 seconds)
-    // Matches net.minecraft.tileentity.TileEntityFurnace.furnaceCookTime
-    private static final int FURNACE_COOK_TICKS = 200;
+public final class ThaumicExplorationProvider implements PropertyProvider {
 
     @Override
     public void register() {
-        RecipePropertyAPI.registerExtractor(FurnaceRecipeHandler.class, this);
+        RecipePropertyAPI.registerExtractor(ReplicatorHandler.class, this);
+
         MachineProfileRegistry.register(
-            MachineProfile.builder("minecraft", "Default")
+            MachineProfile.builder("tx:replicator", "Thaumic Replicator")
                 .setting(Settings.MACHINES.def())
                 .setting(Settings.TICK_MODIFIER.def())
-                .effect(
-                    Effects.durationFromHandler()
-                        .andThen(Effects.clearEnergy())
-                        .andThen(Effects.applyParallelism()))
+                .effect(DefaultProvider::noopEffect)
                 .build());
     }
+
+    @Override
+    public boolean canCraft(final IRecipeHandler handler, final int recipeIndex) {
+        return getProfileId(handler, recipeIndex) != null;
+    }
+
+    // TODO: Make a PR to expose this constant
+    // Thaumic Replicator: base countdown time (ticks) from TileReplicator
+    private static final int REPLICATOR_COUNTDOWN = 100;
 
     @Override
     @Nullable
     public String getProfileId(final IRecipeHandler handler, final int recipeIndex) {
         return switch (handler) {
-            case FurnaceRecipeHandler _ -> MachineProfileRegistry.defaultId();
+            case ReplicatorHandler _ -> "tx:replicator";
             default -> null;
         };
-    }
-
-    @Override
-    public boolean canCraft(final IRecipeHandler handler, final int recipeIndex) {
-        return handler instanceof FurnaceRecipeHandler fh && "crafting.furnace".equals(fh.getOverlayIdentifier());
     }
 
     @Override
@@ -58,8 +55,7 @@ public class VanillaProvider implements PropertyProvider {
         final int recipeIndex) {
         final Map<RecipeProperty<?>, Object> props = new HashMap<>(
             PropertyProvider.super.extract(node, handler, recipeIndex));
-        if (!(handler instanceof FurnaceRecipeHandler)) return props;
-        props.put(RecipePropertyAPI.DURATION_TICKS, FURNACE_COOK_TICKS);
+        props.put(RecipePropertyAPI.DURATION_TICKS, REPLICATOR_COUNTDOWN);
         return props;
     }
 }

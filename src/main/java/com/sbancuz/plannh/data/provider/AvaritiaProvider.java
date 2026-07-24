@@ -6,6 +6,8 @@ import java.util.Map;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import net.minecraft.item.ItemStack;
+
 import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
@@ -15,41 +17,43 @@ import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
 
-import codechicken.nei.recipe.FurnaceRecipeHandler;
 import codechicken.nei.recipe.IRecipeHandler;
+import fox.spiteful.avaritia.compat.nei.CompressionHandler;
 
-public class VanillaProvider implements PropertyProvider {
+public final class AvaritiaProvider implements PropertyProvider {
 
-    // Vanilla furnace: base cook time of 200 ticks (10 seconds)
-    // Matches net.minecraft.tileentity.TileEntityFurnace.furnaceCookTime
-    private static final int FURNACE_COOK_TICKS = 200;
+    public static final RecipeProperty<Integer> COMPRESSION_COST = RecipeProperty
+        .<Integer>builder("compression_cost", 0)
+        .build();
 
     @Override
     public void register() {
-        RecipePropertyAPI.registerExtractor(FurnaceRecipeHandler.class, this);
+        RecipePropertyAPI.registerExtractor(CompressionHandler.class, this);
+
         MachineProfileRegistry.register(
-            MachineProfile.builder("minecraft", "Default")
+            MachineProfile.builder("avaritia:neutronium_compressor", "Neutronium Compressor")
                 .setting(Settings.MACHINES.def())
+                .setting(Settings.INPUTS_PER_TICK.def())
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
-                    Effects.durationFromHandler()
-                        .andThen(Effects.clearEnergy())
+                    Effects.durationFromTotal(COMPRESSION_COST, Settings.INPUTS_PER_TICK.key(), 1)
+                        .andThen(Effects.amortizeEnergy(COMPRESSION_COST))
                         .andThen(Effects.applyParallelism()))
                 .build());
+    }
+
+    @Override
+    public boolean canCraft(final IRecipeHandler handler, final int recipeIndex) {
+        return getProfileId(handler, recipeIndex) != null;
     }
 
     @Override
     @Nullable
     public String getProfileId(final IRecipeHandler handler, final int recipeIndex) {
         return switch (handler) {
-            case FurnaceRecipeHandler _ -> MachineProfileRegistry.defaultId();
+            case CompressionHandler _ -> "avaritia:neutronium_compressor";
             default -> null;
         };
-    }
-
-    @Override
-    public boolean canCraft(final IRecipeHandler handler, final int recipeIndex) {
-        return handler instanceof FurnaceRecipeHandler fh && "crafting.furnace".equals(fh.getOverlayIdentifier());
     }
 
     @Override
@@ -58,8 +62,15 @@ public class VanillaProvider implements PropertyProvider {
         final int recipeIndex) {
         final Map<RecipeProperty<?>, Object> props = new HashMap<>(
             PropertyProvider.super.extract(node, handler, recipeIndex));
-        if (!(handler instanceof FurnaceRecipeHandler)) return props;
-        props.put(RecipePropertyAPI.DURATION_TICKS, FURNACE_COOK_TICKS);
+
+        if (handler instanceof CompressionHandler && !node.inputs.isEmpty()) {
+            final ItemStack stack = (ItemStack) node.inputs.getFirst()
+                .getValue();
+            if (stack != null && stack.stackSize > 0) {
+                props.put(COMPRESSION_COST, stack.stackSize);
+            }
+        }
+
         return props;
     }
 }

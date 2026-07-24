@@ -10,46 +10,43 @@ import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.Settings;
-import com.sbancuz.plannh.data.effect.Effects;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
 
-import codechicken.nei.recipe.FurnaceRecipeHandler;
 import codechicken.nei.recipe.IRecipeHandler;
+import thaumic.tinkerer.client.nei.NEINecromancyHandler;
 
-public class VanillaProvider implements PropertyProvider {
+public final class ThaumicTinkererProvider implements PropertyProvider {
 
-    // Vanilla furnace: base cook time of 200 ticks (10 seconds)
-    // Matches net.minecraft.tileentity.TileEntityFurnace.furnaceCookTime
-    private static final int FURNACE_COOK_TICKS = 200;
+    // TODO: Make a PR to expose this constant
+    // Soul Mould: scan interval (ticks) from TileSoulMould
+    private static final int SCAN_INTERVAL = 300;
 
     @Override
     public void register() {
-        RecipePropertyAPI.registerExtractor(FurnaceRecipeHandler.class, this);
+        RecipePropertyAPI.registerExtractor(NEINecromancyHandler.class, this);
+
         MachineProfileRegistry.register(
-            MachineProfile.builder("minecraft", "Default")
+            MachineProfile.builder("tt:necromancy_soul_mould", "Soul Mould")
                 .setting(Settings.MACHINES.def())
                 .setting(Settings.TICK_MODIFIER.def())
-                .effect(
-                    Effects.durationFromHandler()
-                        .andThen(Effects.clearEnergy())
-                        .andThen(Effects.applyParallelism()))
+                .effect(DefaultProvider::noopEffect)
                 .build());
+    }
+
+    @Override
+    public boolean canCraft(final IRecipeHandler handler, final int recipeIndex) {
+        return getProfileId(handler, recipeIndex) != null;
     }
 
     @Override
     @Nullable
     public String getProfileId(final IRecipeHandler handler, final int recipeIndex) {
         return switch (handler) {
-            case FurnaceRecipeHandler _ -> MachineProfileRegistry.defaultId();
+            case NEINecromancyHandler _ -> "tt:necromancy_soul_mould";
             default -> null;
         };
-    }
-
-    @Override
-    public boolean canCraft(final IRecipeHandler handler, final int recipeIndex) {
-        return handler instanceof FurnaceRecipeHandler fh && "crafting.furnace".equals(fh.getOverlayIdentifier());
     }
 
     @Override
@@ -58,8 +55,7 @@ public class VanillaProvider implements PropertyProvider {
         final int recipeIndex) {
         final Map<RecipeProperty<?>, Object> props = new HashMap<>(
             PropertyProvider.super.extract(node, handler, recipeIndex));
-        if (!(handler instanceof FurnaceRecipeHandler)) return props;
-        props.put(RecipePropertyAPI.DURATION_TICKS, FURNACE_COOK_TICKS);
+        props.put(RecipePropertyAPI.DURATION_TICKS, SCAN_INTERVAL);
         return props;
     }
 }
