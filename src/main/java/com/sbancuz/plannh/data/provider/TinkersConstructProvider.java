@@ -19,7 +19,9 @@ import com.sbancuz.plannh.data.properties.RecipeProperty;
 
 import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
+import tconstruct.library.crafting.CastingRecipe;
 import tconstruct.plugins.nei.RecipeHandlerAlloying;
+import tconstruct.plugins.nei.RecipeHandlerCastingBase;
 import tconstruct.plugins.nei.RecipeHandlerCastingBasin;
 import tconstruct.plugins.nei.RecipeHandlerCastingTable;
 import tconstruct.plugins.nei.RecipeHandlerDryingRack;
@@ -78,6 +80,23 @@ public final class TinkersConstructProvider implements PropertyProvider {
 
         if (cached instanceof final CachedDryingRackRecipe r && r.time > 0) {
             props.put(RecipePropertyAPI.DURATION_TICKS, r.time);
+        }
+
+        if (handler instanceof final RecipeHandlerCastingBase cb) {
+            final List<CastingRecipe> castingRecipes = cb.getCastingRecipes();
+            final var resultPos = cached.getResult();
+            if (resultPos != null && resultPos.item != null) {
+                CastingRecipe match = null;
+                for (final CastingRecipe cr : castingRecipes) {
+                    if (cr.output.isItemEqual(resultPos.item)) {
+                        match = cr;
+                        break;
+                    }
+                }
+                if (match != null && match.coolTime > 0) {
+                    props.put(RecipePropertyAPI.DURATION_TICKS, match.coolTime);
+                }
+            }
         }
 
         return props;
