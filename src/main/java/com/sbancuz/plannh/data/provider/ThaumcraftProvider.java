@@ -25,6 +25,7 @@ import com.sbancuz.plannh.data.effect.Effects;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
+import com.sbancuz.plannh.data.properties.SummaryProperty;
 
 import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
@@ -39,7 +40,7 @@ import thaumcraft.api.crafting.ShapelessArcaneRecipe;
 
 public class ThaumcraftProvider implements PropertyProvider {
 
-    public static final RecipeProperty<int[]> VIS_COST = RecipeProperty.<int[]>builder("vis_cost", new int[6])
+    public static final RecipeProperty<int[]> VIS_COST = SummaryProperty.builder("vis_cost", new int[6])
         .build();
 
     public static final RecipeProperty<Integer> INSTABILITY = RecipeProperty.<Integer>builder("instability", 0)
@@ -73,8 +74,8 @@ public class ThaumcraftProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromTotal(TOTAL_VIS, Settings.VIS_PER_TICK.key(), 1)
-                        .andThen(Effects.amortizeEnergy(TOTAL_VIS))
-                        .andThen(Effects.applyParallelism()))
+                        .amortizeEnergy(TOTAL_VIS)
+                        .applyParallelism())
                 .build());
         MachineProfileRegistry.register(
             MachineProfile.builder("thaumcraft:infusion", "Infusion Altar")
@@ -85,8 +86,8 @@ public class ThaumcraftProvider implements PropertyProvider {
                     final int nc = ctx.getOrDefault(NUM_COMPONENTS, 0);
                     return tv * 10 + nc * 60;
                 })
-                    .andThen(Effects.amortizeEnergy(TOTAL_VIS))
-                    .andThen(Effects.applyParallelism()))
+                    .amortizeEnergy(TOTAL_VIS)
+                    .applyParallelism())
                 .build());
     }
 

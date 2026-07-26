@@ -7,7 +7,6 @@ import java.util.function.ToIntBiFunction;
 import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.RecipeContext;
-import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
 
 public final class Effects {
@@ -52,40 +51,20 @@ public final class Effects {
         };
     }
 
-    public static EffectStep amortizeEnergy(final RecipeProperty<? extends Number> prop) {
-        return (current, s, ctx) -> {
-            if (current.energyPerT() == 0 && current.durationTicks() > 0) {
-                final Number total = ctx.getOrDefault(prop, null);
-                if (total != null && total.longValue() > 0) {
-                    current.energyPerT(total.longValue() / current.durationTicks());
-                }
-            }
-            return current;
-        };
-    }
-
-    public static EffectStep clearEnergy() {
-        return (current, s, ctx) -> {
-            current.energyPerT(0);
-            return current;
-        };
-    }
-
-    public static EffectStep applyParallelism() {
-        return (current, s, ctx) -> {
-            final int machines = MachineProfile.getInt(s, Settings.MACHINES.key(), 1);
-            final int parallels = MachineProfile.getInt(s, Settings.PARALLELS.key(), 1);
-            current.throughputFactor(current.throughputFactor() * machines * parallels);
-            return current;
-        };
-    }
-
     public static EffectComputer onlyIf(final Predicate<Map<String, Object>> condition,
         final EffectComputer delegate) {
         return (s, ctx) -> {
             if (condition.test(s)) return delegate.compute(s, ctx);
             final Object dur = ctx.properties().get(RecipePropertyAPI.DURATION_TICKS);
             return new EffectResult(dur instanceof final Number n ? n.intValue() : 0, 0, 1);
+        };
+    }
+
+    public static EffectComputer clearEnergy() {
+        return (s, ctx) -> {
+            final Object dur = ctx.properties().get(RecipePropertyAPI.DURATION_TICKS);
+            final int d = dur instanceof final Number n ? n.intValue() : 0;
+            return new EffectResult(d, 0, 1);
         };
     }
 

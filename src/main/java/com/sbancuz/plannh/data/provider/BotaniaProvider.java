@@ -16,6 +16,7 @@ import com.sbancuz.plannh.data.effect.Effects;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
+import com.sbancuz.plannh.data.properties.SummaryProperty;
 
 import codechicken.nei.recipe.IRecipeHandler;
 import codechicken.nei.recipe.TemplateRecipeHandler;
@@ -32,7 +33,7 @@ import vazkii.botania.client.integration.nei.recipe.RecipeHandlerRunicAltar.Cach
 
 public class BotaniaProvider implements PropertyProvider {
 
-    public static final RecipeProperty<Integer> MANA_COST = RecipeProperty.<Integer>builder("mana_cost", 0)
+    public static final RecipeProperty<Integer> MANA_COST = SummaryProperty.builder("mana_cost", 0)
         .build();
 
     @Override
@@ -53,8 +54,8 @@ public class BotaniaProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromTotal(MANA_COST, Settings.MANA_PER_TICK.key(), 10)
-                        .andThen(Effects.amortizeEnergy(MANA_COST))
-                        .andThen(Effects.applyParallelism()))
+                        .amortizeEnergy(MANA_COST)
+                        .applyParallelism())
                 .build());
     }
 

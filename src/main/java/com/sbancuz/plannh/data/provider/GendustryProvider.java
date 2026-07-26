@@ -28,7 +28,7 @@ import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.effect.Effects;
-import com.sbancuz.plannh.data.effect.steps.RFEffectStep;
+import com.sbancuz.plannh.data.effect.steps.CoFHCompat;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
@@ -56,8 +56,8 @@ public final class GendustryProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromHandler()
-                        .andThen(Effects.amortizeEnergy(RFEffectStep.RF_COST))
-                        .andThen(Effects.applyParallelism()))
+                        .amortizeEnergy(CoFHCompat.RF_COST)
+                        .applyParallelism())
                 .build());
     }
 
@@ -127,7 +127,7 @@ public final class GendustryProvider implements PropertyProvider {
 
         final int ticks = (int) (mj / power);
         props.put(RecipePropertyAPI.DURATION_TICKS, Math.max(1, ticks));
-        props.put(RFEffectStep.RF_COST, (long) mj);
+        props.put(CoFHCompat.RF_COST, (long) mj);
 
         return props;
     }

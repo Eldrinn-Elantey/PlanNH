@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
+import com.sbancuz.plannh.data.effect.Effects;
 import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
@@ -26,7 +27,9 @@ public final class ProjectBlueProvider implements PropertyProvider {
             MachineProfile.builder("projectblue:basic", "Project Blue")
                 .setting(Settings.MACHINES.def())
                 .setting(Settings.TICK_MODIFIER.def())
-                .effect(DefaultProvider::noopEffect)
+                .effect(
+                    Effects.clearEnergy()
+                        .applyParallelism())
                 .build());
     }
 

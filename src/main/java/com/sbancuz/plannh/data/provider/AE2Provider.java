@@ -13,6 +13,7 @@ import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.effect.Effects;
+import com.sbancuz.plannh.data.effect.steps.CoFHCompat;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
@@ -73,13 +74,13 @@ public final class AE2Provider implements PropertyProvider {
                     final int speedFactor = TileInscriber.BASE_SPEED + cards;
                     return Math.max(1, (TileInscriber.MAX_PROCESSING_TIME + speedFactor - 1) / speedFactor);
                 })
-                    .andThen((current, s, ctx) -> {
+                    .withCostPerT(CoFHCompat.RF_PER_T, (current, s, ctx) -> {
                         final int cards = (int) s.getOrDefault(Settings.CATALYST.key(), 0);
                         final int speedFactor = TileInscriber.BASE_SPEED + cards;
-                        current.energyPerT((long) TileInscriber.BASE_POWER_PER_TICK * speedFactor);
-                        return current;
+                        return (long) TileInscriber.BASE_POWER_PER_TICK * speedFactor;
                     })
-                    .andThen(Effects.applyParallelism()))
+                    .applyParallelism()
+                    .computeTotal(CoFHCompat.RF_COST))
                 .build());
 
         MachineProfileRegistry.register(
@@ -104,7 +105,7 @@ public final class AE2Provider implements PropertyProvider {
                         current.energyPerT(Math.round(speed * tax));
                         return current;
                     })
-                    .andThen(Effects.applyParallelism()))
+                    .applyParallelism())
                 .build());
     }
 

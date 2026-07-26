@@ -14,7 +14,7 @@ import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.RecipeHandlerAccess;
 import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.effect.Effects;
-import com.sbancuz.plannh.data.effect.steps.RFEffectStep;
+import com.sbancuz.plannh.data.effect.steps.CoFHCompat;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
@@ -61,8 +61,9 @@ public class EnderIOProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromHandler()
-                        .andThen(Effects.amortizeEnergy(RFEffectStep.RF_COST))
-                        .andThen(Effects.applyParallelism()))
+                        .withCostPerT(CoFHCompat.RF_PER_T, (current, s, ctx) -> (long) RF_PER_TICK)
+                        .computeTotal(CoFHCompat.RF_COST)
+                        .applyParallelism())
                 .build());
 
         Field f = null;
@@ -121,7 +122,7 @@ public class EnderIOProvider implements PropertyProvider {
 
     private static void applyEnergy(final Map<RecipeProperty<?>, Object> props, final int energy) {
         props.put(RecipePropertyAPI.DURATION_TICKS, energy / RF_PER_TICK);
-        props.put(RFEffectStep.RF_COST, (long) energy);
+        props.put(CoFHCompat.RF_COST, (long) energy);
     }
 
     private static void applyMillChances(final Node node, final MillRecipe r) {

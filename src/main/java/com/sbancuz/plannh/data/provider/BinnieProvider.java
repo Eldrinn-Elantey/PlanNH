@@ -14,7 +14,7 @@ import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.RecipeHandlerAccess;
 import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.effect.Effects;
-import com.sbancuz.plannh.data.effect.steps.RFEffectStep;
+import com.sbancuz.plannh.data.effect.steps.CoFHCompat;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
@@ -86,8 +86,8 @@ public final class BinnieProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromHandler()
-                        .andThen(Effects.amortizeEnergy(RFEffectStep.RF_COST))
-                        .andThen(Effects.applyParallelism()))
+                        .amortizeEnergy(CoFHCompat.RF_COST)
+                        .applyParallelism())
                 .build());
     }
 
@@ -118,19 +118,19 @@ public final class BinnieProvider implements PropertyProvider {
         switch (handler) {
             case GenepoolRecipeHandler _ -> {
                 props.put(RecipePropertyAPI.DURATION_TICKS, Genepool.TIME_PERIOD);
-                props.put(RFEffectStep.RF_COST, (long) Genepool.RF_COST);
+                props.put(CoFHCompat.RF_COST, (long) Genepool.RF_COST);
             }
             case IsolatorRecipeHandler _ -> {
                 props.put(RecipePropertyAPI.DURATION_TICKS, Isolator.TIME_PERIOD);
-                props.put(RFEffectStep.RF_COST, (long) Isolator.RF_COST);
+                props.put(CoFHCompat.RF_COST, (long) Isolator.RF_COST);
             }
             case AnalyserRecipeHandler _ -> {
                 props.put(RecipePropertyAPI.DURATION_TICKS, Analyser.TIME_PERIOD);
-                props.put(RFEffectStep.RF_COST, (long) Analyser.RF_COST);
+                props.put(CoFHCompat.RF_COST, (long) Analyser.RF_COST);
             }
             case NEIHandlerLumbermill _ -> {
                 props.put(RecipePropertyAPI.DURATION_TICKS, Lumbermill.TIME_PERIOD);
-                props.put(RFEffectStep.RF_COST, (long) Lumbermill.RF_COST);
+                props.put(CoFHCompat.RF_COST, (long) Lumbermill.RF_COST);
             }
             case SequencerRecipeHandler r ->
                 extractSequencer(props, r, recipeIndex);
@@ -143,7 +143,7 @@ public final class BinnieProvider implements PropertyProvider {
             case IncubatorRecipeHandler r ->
                 extractIncubator(props, r, recipeIndex);
             case AcclimatiserRecipeHandler _ ->
-                props.put(RFEffectStep.RF_COST, (long) ACCLIMATISER_ESTIMATED_RF);
+                props.put(CoFHCompat.RF_COST, (long) ACCLIMATISER_ESTIMATED_RF);
             default -> {}
         }
 
@@ -161,7 +161,7 @@ public final class BinnieProvider implements PropertyProvider {
         final float strength = 1.0f - temp * temp * SEQUENCER_STRENGTH_FACTOR;
         final int ticks = Math.max(1, (int) (SEQUENCER_BASE_LENGTH * strength));
         props.put(RecipePropertyAPI.DURATION_TICKS, ticks);
-        props.put(RFEffectStep.RF_COST, (long) ticks * SEQUENCER_RF_PER_TICK);
+        props.put(CoFHCompat.RF_COST, (long) ticks * SEQUENCER_RF_PER_TICK);
     }
 
     private static void extractPolymeriser(final Map<RecipeProperty<?>, Object> props,
@@ -174,7 +174,7 @@ public final class BinnieProvider implements PropertyProvider {
         final boolean hasGold = cached.goldNugget != null && cached.goldNugget.item != null;
         final double factor = Math.max(1, geneCount) * (hasGold ? POLYMERISER_GOLD_FACTOR : 1.0);
         props.put(RecipePropertyAPI.DURATION_TICKS, Math.max(1, (int) (Polymeriser.TIME_PERIOD * factor)));
-        props.put(RFEffectStep.RF_COST, (long) Math.max(1, (int) (Polymeriser.RF_COST * factor)));
+        props.put(CoFHCompat.RF_COST, (long) Math.max(1, (int) (Polymeriser.RF_COST * factor)));
     }
 
     private static void extractInoculator(final Map<RecipeProperty<?>, Object> props,
@@ -186,7 +186,7 @@ public final class BinnieProvider implements PropertyProvider {
             1,
             cached.serum != null && cached.serum.item != null ? Engineering.getGenes(cached.serum.item).length : 1);
         props.put(RecipePropertyAPI.DURATION_TICKS, Math.max(1, Inoculator.TIME_PERIOD * factor));
-        props.put(RFEffectStep.RF_COST, (long) Math.max(1, Inoculator.RF_COST * factor));
+        props.put(CoFHCompat.RF_COST, (long) Math.max(1, Inoculator.RF_COST * factor));
     }
 
     private static void extractSplicer(final Map<RecipeProperty<?>, Object> props, final TemplateRecipeHandler handler,
@@ -199,7 +199,7 @@ public final class BinnieProvider implements PropertyProvider {
             cached.serum != null && cached.serum.item != null ? Engineering.getGenes(cached.serum.item).length : 1) - 1)
             * SPLICER_GENE_FACTOR;
         props.put(RecipePropertyAPI.DURATION_TICKS, Math.max(1, (int) (Splicer.TIME_PERIOD * factor)));
-        props.put(RFEffectStep.RF_COST, (long) Math.max(1, (int) (Splicer.RF_COST * factor)));
+        props.put(CoFHCompat.RF_COST, (long) Math.max(1, (int) (Splicer.RF_COST * factor)));
     }
 
     private static void extractIncubator(final Map<RecipeProperty<?>, Object> props,
@@ -221,6 +221,6 @@ public final class BinnieProvider implements PropertyProvider {
         if (tickChance <= 0) tickChance = 1.0f;
         final int ticks = Math.max(1, (int) (1.0f / tickChance));
         props.put(RecipePropertyAPI.DURATION_TICKS, ticks);
-        props.put(RFEffectStep.RF_COST, (long) (Incubator.ENERGY_PER_TICK / tickChance));
+        props.put(CoFHCompat.RF_COST, (long) (Incubator.ENERGY_PER_TICK / tickChance));
     }
 }

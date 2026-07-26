@@ -16,13 +16,14 @@ import com.sbancuz.plannh.data.effect.Effects;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
+import com.sbancuz.plannh.data.properties.SummaryProperty;
 
 import codechicken.nei.recipe.IRecipeHandler;
 import fox.spiteful.avaritia.compat.nei.CompressionHandler;
 
 public final class AvaritiaProvider implements PropertyProvider {
 
-    public static final RecipeProperty<Integer> COMPRESSION_COST = RecipeProperty
+    public static final RecipeProperty<Integer> COMPRESSION_COST = SummaryProperty
         .<Integer>builder("compression_cost", 0)
         .build();
 
@@ -37,8 +38,8 @@ public final class AvaritiaProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromTotal(COMPRESSION_COST, Settings.INPUTS_PER_TICK.key(), 1)
-                        .andThen(Effects.amortizeEnergy(COMPRESSION_COST))
-                        .andThen(Effects.applyParallelism()))
+                        .amortizeEnergy(COMPRESSION_COST)
+                        .applyParallelism())
                 .build());
     }
 

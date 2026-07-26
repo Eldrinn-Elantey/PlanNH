@@ -15,7 +15,7 @@ import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.RecipeHandlerAccess;
 import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.effect.Effects;
-import com.sbancuz.plannh.data.effect.steps.RFEffectStep;
+import com.sbancuz.plannh.data.effect.steps.CoFHCompat;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
@@ -69,8 +69,8 @@ public class ForestryProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromHandler()
-                        .andThen(Effects.amortizeEnergy(RFEffectStep.RF_COST))
-                        .andThen(Effects.applyParallelism()))
+                        .amortizeEnergy(CoFHCompat.RF_COST)
+                        .applyParallelism())
                 .build());
     }
 
@@ -106,7 +106,7 @@ public class ForestryProvider implements PropertyProvider {
         switch (handler) {
             case NEIHandlerBottler _ -> {
                 props.put(RecipePropertyAPI.DURATION_TICKS, BOTTLER_TICKS);
-                props.put(RFEffectStep.RF_COST, (long) BOTTLER_RF);
+                props.put(CoFHCompat.RF_COST, (long) BOTTLER_RF);
             }
             case NEIHandlerCentrifuge _ when cached instanceof final CachedCentrifugeRecipe c ->
                 extractCentrifuge(props, c);
@@ -121,14 +121,14 @@ public class ForestryProvider implements PropertyProvider {
     private static void extractSqueezer(final Map<RecipeProperty<?>, Object> props, final CachedSqueezerRecipe s) {
         if (s.processingTime <= 0) return;
         props.put(RecipePropertyAPI.DURATION_TICKS, s.processingTime * GAME_TICKS_PER_WORK_TICK);
-        props.put(RFEffectStep.RF_COST, (long) s.processingTime * SQUEEZER_RF_PER_WORK_TICK);
+        props.put(CoFHCompat.RF_COST, (long) s.processingTime * SQUEEZER_RF_PER_WORK_TICK);
     }
 
     private static void extractCentrifuge(final Map<RecipeProperty<?>, Object> props, final CachedCentrifugeRecipe c) {
         final int workTicks = lookupCentrifugeTime(c.inputs.item);
         if (workTicks <= 0) return;
         props.put(RecipePropertyAPI.DURATION_TICKS, workTicks * GAME_TICKS_PER_WORK_TICK);
-        props.put(RFEffectStep.RF_COST, (long) workTicks * CENTRIFUGE_RF_PER_WORK_TICK);
+        props.put(CoFHCompat.RF_COST, (long) workTicks * CENTRIFUGE_RF_PER_WORK_TICK);
     }
 
     private static int lookupCentrifugeTime(final @Nullable ItemStack input) {

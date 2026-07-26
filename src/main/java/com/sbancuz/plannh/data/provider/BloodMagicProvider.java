@@ -11,11 +11,13 @@ import javax.annotation.Nullable;
 import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
+import com.sbancuz.plannh.data.effect.Effects;
 import com.sbancuz.plannh.data.RecipeHandlerAccess;
 import com.sbancuz.plannh.data.Settings;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.properties.PropertyProvider;
 import com.sbancuz.plannh.data.properties.RecipeProperty;
+import com.sbancuz.plannh.data.properties.SummaryProperty;
 
 import WayofTime.alchemicalWizardry.client.nei.NEIAlchemyRecipeHandler;
 import WayofTime.alchemicalWizardry.client.nei.NEIAlchemyRecipeHandler.CachedAlchemyRecipe;
@@ -31,10 +33,10 @@ import codechicken.nei.recipe.TemplateRecipeHandler;
 
 public final class BloodMagicProvider implements PropertyProvider {
 
-    public static final RecipeProperty<Integer> LP_AMOUNT = RecipeProperty.<Integer>builder("lp_amount", 0)
+    public static final RecipeProperty<Integer> LP_AMOUNT = SummaryProperty.builder("lp_amount", 0)
         .build();
 
-    public static final RecipeProperty<Integer> LP_TIER = RecipeProperty.<Integer>builder("lp_tier", 0)
+    public static final RecipeProperty<Integer> LP_TIER = SummaryProperty.builder("lp_tier", 0)
         .build();
 
     @Nullable
@@ -69,7 +71,9 @@ public final class BloodMagicProvider implements PropertyProvider {
             MachineProfile.builder("bloodmagic:altar", "Blood Altar")
                 .setting(Settings.MACHINES.def())
                 .setting(Settings.TICK_MODIFIER.def())
-                .effect(DefaultProvider::noopEffect)
+                .effect(
+                    Effects.clearEnergy()
+                        .applyParallelism())
                 .build());
     }
 

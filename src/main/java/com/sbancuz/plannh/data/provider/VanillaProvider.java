@@ -33,8 +33,7 @@ public class VanillaProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromHandler()
-                        .andThen(Effects.clearEnergy())
-                        .andThen(Effects.applyParallelism()))
+                        .applyParallelism())
                 .build());
     }
 
