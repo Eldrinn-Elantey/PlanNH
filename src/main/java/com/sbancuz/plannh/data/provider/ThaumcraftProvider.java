@@ -74,7 +74,7 @@ public class ThaumcraftProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromTotal(TOTAL_VIS, Settings.VIS_PER_TICK.key(), 1)
-                        .amortizeEnergy(TOTAL_VIS)
+                        .amortizeCost(TOTAL_VIS)
                         .applyParallelism())
                 .build());
         MachineProfileRegistry.register(
@@ -86,7 +86,7 @@ public class ThaumcraftProvider implements PropertyProvider {
                     final int nc = ctx.getOrDefault(NUM_COMPONENTS, 0);
                     return tv * 10 + nc * 60;
                 })
-                    .amortizeEnergy(TOTAL_VIS)
+                    .amortizeCost(TOTAL_VIS)
                     .applyParallelism())
                 .build());
     }

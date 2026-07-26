@@ -60,7 +60,7 @@ public final class Effects {
         };
     }
 
-    public static EffectComputer clearEnergy() {
+    public static EffectComputer clearCost() {
         return (s, ctx) -> {
             final Object dur = ctx.properties().get(RecipePropertyAPI.DURATION_TICKS);
             final int d = dur instanceof final Number n ? n.intValue() : 0;

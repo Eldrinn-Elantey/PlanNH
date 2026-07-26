@@ -38,7 +38,7 @@ public final class AvaritiaProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromTotal(COMPRESSION_COST, Settings.INPUTS_PER_TICK.key(), 1)
-                        .amortizeEnergy(COMPRESSION_COST)
+                        .amortizeCost(COMPRESSION_COST)
                         .applyParallelism())
                 .build());
     }

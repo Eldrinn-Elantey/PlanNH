@@ -28,7 +28,7 @@ public final class ProjectBlueProvider implements PropertyProvider {
                 .setting(Settings.MACHINES.def())
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
-                    Effects.clearEnergy()
+                    Effects.clearCost()
                         .applyParallelism())
                 .build());
     }

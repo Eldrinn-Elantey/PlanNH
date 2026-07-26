@@ -54,7 +54,7 @@ public class BotaniaProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromTotal(MANA_COST, Settings.MANA_PER_TICK.key(), 10)
-                        .amortizeEnergy(MANA_COST)
+                        .amortizeCost(MANA_COST)
                         .applyParallelism())
                 .build());
     }

@@ -34,7 +34,7 @@ public final class GalacticraftProvider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
                     Effects.durationFromHandler()
-                        .amortizeEnergy(CoFHCompat.RF_COST)
+                        .amortizeCost(CoFHCompat.RF_COST)
                         .applyParallelism())
                 .build());
     }

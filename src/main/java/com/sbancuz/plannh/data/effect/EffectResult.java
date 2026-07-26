@@ -3,12 +3,12 @@ package com.sbancuz.plannh.data.effect;
 public class EffectResult {
 
     private int durationTicks;
-    private long energyPerT;
+    private long costPerT;
     private int throughputFactor;
 
-    public EffectResult(int durationTicks, long energyPerT, int throughputFactor) {
+    public EffectResult(int durationTicks, long costPerT, int throughputFactor) {
         this.durationTicks = durationTicks;
-        this.energyPerT = energyPerT;
+        this.costPerT = costPerT;
         this.throughputFactor = throughputFactor;
     }
 
@@ -17,7 +17,7 @@ public class EffectResult {
     }
 
     public long energyPerT() {
-        return energyPerT;
+        return costPerT;
     }
 
     public int throughputFactor() {
@@ -29,7 +29,7 @@ public class EffectResult {
     }
 
     public void energyPerT(long value) {
-        this.energyPerT = value;
+        this.costPerT = value;
     }
 
     public void throughputFactor(int value) {

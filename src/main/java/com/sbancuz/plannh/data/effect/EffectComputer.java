@@ -61,7 +61,7 @@ public interface EffectComputer {
         };
     }
 
-    default EffectComputer amortizeEnergy(final RecipeProperty<? extends Number> prop) {
+    default EffectComputer amortizeCost(final RecipeProperty<? extends Number> prop) {
         return (s, ctx) -> {
             final EffectResult res = this.compute(s, ctx);
             if (res.energyPerT() == 0 && res.durationTicks() > 0) {
