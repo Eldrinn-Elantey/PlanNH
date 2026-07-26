@@ -5,6 +5,7 @@ import java.util.function.BiFunction;
 
 import javax.annotation.Nonnull;
 
+// TODO: Rework these making them customizable
 public enum Settings {
 
     // ── int settings ──
@@ -34,6 +35,7 @@ public enum Settings {
     RF_PER_TICK("rf_per_tick", 80, 1, 10000),
     FORESTRY_RF_PER_TICK("forestry_rf_per_tick", 10, 1, 10000),
     INPUTS_PER_TICK("inputs_per_tick", 1, 1, 10000),
+    LP_PER_TICK("lp_per_tick", 20, 1, 100000),
 
     // ── bool settings ──
     PERFECT_OC("perfect_oc", false, (v, c) -> v ? "P" : null),

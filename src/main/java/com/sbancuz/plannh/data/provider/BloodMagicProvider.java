@@ -36,7 +36,7 @@ public final class BloodMagicProvider implements PropertyProvider {
     public static final RecipeProperty<Integer> LP_AMOUNT = SummaryProperty.builder("lp_amount", 0)
         .build();
 
-    public static final RecipeProperty<Integer> LP_TIER = SummaryProperty.builder("lp_tier", 0)
+    public static final RecipeProperty<Integer> LP_TIER = RecipeProperty.builder("lp_tier", 0)
         .build();
 
     @Nullable
@@ -70,9 +70,11 @@ public final class BloodMagicProvider implements PropertyProvider {
         MachineProfileRegistry.register(
             MachineProfile.builder("bloodmagic:altar", "Blood Altar")
                 .setting(Settings.MACHINES.def())
+                .setting(Settings.LP_PER_TICK.def())
                 .setting(Settings.TICK_MODIFIER.def())
                 .effect(
-                    Effects.clearCost()
+                    Effects.durationFromTotal(LP_AMOUNT, Settings.LP_PER_TICK.key(), 20)
+                        .amortizeCost(LP_AMOUNT)
                         .applyParallelism())
                 .build());
     }
