@@ -14,6 +14,8 @@ public class SlotSet {
 
         public String name;
         public Graph graph;
+        /** Per-slot and session-only: edits also arrive from the NEI overlay with no screen open. */
+        public final transient UndoHistory undoHistory = new UndoHistory();
 
         public Slot(final String name, final Graph graph) {
             this.name = name;
@@ -28,13 +30,26 @@ public class SlotSet {
     public boolean summaryCollapsed = false;
     public SummaryMode summaryMode = SummaryMode.CYCLES;
 
-    public Graph getActiveGraph() {
+    /** Clamps activeSlot and guarantees a slot exists. */
+    private Slot activeSlot() {
         if (slots.isEmpty()) {
             slots.add(new Slot("Slot 1", new Graph()));
         }
         if (activeSlot < 0 || activeSlot >= slots.size()) {
             activeSlot = 0;
         }
-        return slots.get(activeSlot).graph;
+        return slots.get(activeSlot);
+    }
+
+    public Graph getActiveGraph() {
+        return activeSlot().graph;
+    }
+
+    public void setActiveGraph(final Graph graph) {
+        activeSlot().graph = graph;
+    }
+
+    public UndoHistory getActiveUndoHistory() {
+        return activeSlot().undoHistory;
     }
 }

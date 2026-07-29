@@ -3,6 +3,8 @@ package com.sbancuz.plannh.gui;
 import java.util.Map;
 import java.util.UUID;
 
+import org.lwjgl.input.Mouse;
+
 import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.api.widget.IDragResizeable;
 import com.cleanroommc.modularui.drawable.Rectangle;
@@ -11,12 +13,17 @@ import com.cleanroommc.modularui.utils.Color;
 import com.cleanroommc.modularui.value.BoolValue;
 import com.cleanroommc.modularui.widget.sizer.Area;
 import com.cleanroommc.modularui.widgets.ToggleButton;
+import com.sbancuz.plannh.api.PlanAPI;
 import com.sbancuz.plannh.data.flowchart.Group;
 
 public class GroupWidget2 extends FlowchartWidget<GroupWidget2, Group> implements IDragResizeable {
 
     public static final int GROUP_MIN_W = 300;
     public static final int GROUP_MIN_H = 200;
+
+    // Edge-drag resizing has no end callback: the panel calls onDragResize per moved pixel and
+    // swallows the release.
+    private String resizeEditToken;
 
     protected GroupWidget2(CanvasWidget canvas, Group data) {
         super(canvas, data);
@@ -46,15 +53,19 @@ public class GroupWidget2 extends FlowchartWidget<GroupWidget2, Group> implement
                         .coverChildren()
                         .reverseLayout()
                         .child(new CloseButtonWidget(this))
-                        .child(new ToggleButton().value(new BoolValue.Dynamic(data::isCoverChildren, val -> {
-                            data.setCoverChildren(val);
-                            if (data.isCoverChildren()) coverChildren(GROUP_MIN_W, GROUP_MIN_H);
-                            else disableCoverChildren();
-                            scheduleResize();
-                        }))
-                            .overlay(
-                                IKey.str("CC")
-                                    .color(Color.WHITE.main)))));
+                        .child(
+                            new ToggleButton().value(
+                                new BoolValue.Dynamic(
+                                    data::isCoverChildren,
+                                    val -> PlanAPI.recordEdit(canvas.getGraph(), () -> {
+                                        data.setCoverChildren(val);
+                                        if (data.isCoverChildren()) coverChildren(GROUP_MIN_W, GROUP_MIN_H);
+                                        else disableCoverChildren();
+                                        scheduleResize();
+                                    })))
+                                .overlay(
+                                    IKey.str("CC")
+                                        .color(Color.WHITE.main)))));
     }
 
     @Override
@@ -106,6 +117,25 @@ public class GroupWidget2 extends FlowchartWidget<GroupWidget2, Group> implement
     @Override
     public boolean keepPosOnDragResize() {
         return false;
+    }
+
+    @Override
+    public void onDragResize() {
+        if (resizeEditToken == null) {
+            resizeEditToken = PlanAPI.undoHistory()
+                .beginEdit(canvas.getGraph());
+        }
+        IDragResizeable.super.onDragResize();
+    }
+
+    @Override
+    public void onUpdate() {
+        super.onUpdate();
+        if (resizeEditToken != null && !Mouse.isButtonDown(0)) {
+            PlanAPI.undoHistory()
+                .commitEdit(resizeEditToken, canvas.getGraph());
+            resizeEditToken = null;
+        }
     }
 
     @Override
