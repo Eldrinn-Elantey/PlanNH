@@ -68,7 +68,7 @@ public final class AE2Provider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .setting(
                     Settings.CATALYST.def()
-                        .withCustomLabel((ctx, s) -> "accel_card"))
+                        .withCustomLabel((ctx, s) -> "catalyst.accel_card"))
                 .effect(Effects.durationFromFormula((ctx, s) -> {
                     final int cards = (int) s.getOrDefault(Settings.CATALYST.key(), 0);
                     final int speedFactor = TileInscriber.BASE_SPEED + cards;
@@ -89,7 +89,7 @@ public final class AE2Provider implements PropertyProvider {
                 .setting(Settings.TICK_MODIFIER.def())
                 .setting(
                     Settings.CATALYST.def()
-                        .withCustomLabel((ctx, s) -> "accel_card"))
+                        .withCustomLabel((ctx, s) -> "catalyst.accel_card"))
                 .effect(Effects.durationFromFormula((ctx, s) -> {
                     final int cards = Math
                         .min((int) s.getOrDefault(Settings.CATALYST.key(), 0), TileMolecularAssembler.SPEED.length - 1);

@@ -115,6 +115,6 @@ public class SettingDef<T> {
             options,
             badgeFn,
             visibility,
-            (ctx, s) -> StatCollector.translateToLocal("planh.settings." + labelFn.apply(ctx, s)));
+            (ctx, s) -> StatCollector.translateToLocal("plannh.settings." + labelFn.apply(ctx, s)));
     }
 }

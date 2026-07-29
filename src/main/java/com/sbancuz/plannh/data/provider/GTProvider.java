@@ -160,7 +160,7 @@ public class GTProvider implements PropertyProvider {
         .setting(
             Settings.CATALYST.def()
                 .withVisibility((ctx, s) -> isEoH(ctx))
-                .withCustomLabel((ctx, s) -> isEoH(ctx) ? "astral_arrays" : Settings.CATALYST.key()))
+                .withCustomLabel((ctx, s) -> isEoH(ctx) ? "catalyst.astral_arrays" : Settings.CATALYST.key()))
 
         .effect(
             Effects.durationFromHandler()
