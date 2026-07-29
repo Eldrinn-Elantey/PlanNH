@@ -53,9 +53,7 @@ class BalancerSmokeTest {
      * displayed operation count being the ceiling of the fractional machine count.
      */
     @ParameterizedTest
-    @ValueSource(
-        strings = { "mk1", "mk1_tiberium", "loopGraph", "light_fuel", "light_fuel_hydrogen_loop", "230_platline",
-            "palladium_line", "nanocircuits" })
+    @MethodSource("corpus")
     void autoModeStaysWithinBudget(final String name) {
         final LoadedChart chart = GtnhFlowLoader.load(name);
         final BalanceResult result = assertTimeoutPreemptively(
@@ -100,11 +98,13 @@ class BalancerSmokeTest {
      * The gtnh-flow contract at the Balancer level: an unpinned chart in AUTO mode shows NO
      * quantities - zero counts, empty effective rates (so no throughput rows and an empty
      * summary), and a note telling the user how to ask for a balance. mk1's only pin is a
-     * target: pin with no runtime equivalent, so loading it gives an unpinned graph.
+     * target: pin, which the loader turns into an OUTPUT/INPUT-shaped machine-count anchor;
+     * AUTO takes target pins as real constraints instead, so that anchor is cleared first.
      */
     @org.junit.jupiter.api.Test
     void autoModeUnpinned_showsNoQuantities() {
         final LoadedChart chart = GtnhFlowLoader.load("mk1");
+        GtnhFlowLoader.clearTargetAnchors(chart);
 
         final BalanceResult result = Balancer.balance(chart.graph(), BalanceMode.AUTO, false);
 

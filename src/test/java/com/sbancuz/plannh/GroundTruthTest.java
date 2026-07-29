@@ -217,9 +217,10 @@ class GroundTruthTest {
         // The gtnh-flow contract: an unpinned chart is just wiring. The model is homogeneous
         // (every solution scales freely), so instead of inventing an anchor the solver refuses
         // with a message telling the user how to ask for a balance. mk1's only pin is a target:
-        // pin, which has no in-game runtime yet - so solving it WITHOUT the test's converted
-        // pins is exactly the unpinned case.
+        // pin; dropping the loader's count anchor for it and passing no pins of our own is
+        // exactly the unpinned case.
         final LoadedChart chart = GtnhFlowLoader.load("mk1");
+        GtnhFlowLoader.clearTargetAnchors(chart);
         final Result result = AutoBalancer.solve(chart.graph());
 
         assertTrue(!result.isSuccess(), "unpinned chart must not be balanced");
@@ -280,8 +281,7 @@ class GroundTruthTest {
         // Never trust solver status codes: AutoBalancer.solve validates every
         // solution against its own port-conservation rows and rejects on residuals; a corpus
         // chart coming back as failure here means either a solver bug or a validation bug.
-        for (final String name : new String[] { "mk1", "mk1_tiberium", "loopGraph", "light_fuel",
-            "light_fuel_hydrogen_loop", "230_platline", "palladium_line", "nanocircuits" }) {
+        for (final String name : GtnhFlowLoader.CORPUS) {
             final LoadedChart chart = GtnhFlowLoader.load(name);
             final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
             assertTrue(result.isSuccess(), () -> name + " failed: " + result.failure());

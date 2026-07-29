@@ -53,8 +53,8 @@ public final class GtnhFlowLoader {
     private static final int TICKS_PER_SECOND = 20;
 
     /** The bundled corpus, one entry per fixture under {@code /gtnh-flow/}. */
-    public static final String[] CORPUS = { "mk1", "loopGraph", "light_fuel", "light_fuel_hydrogen_loop",
-        "230_platline", "palladium_line", "nanocircuits" };
+    public static final String[] CORPUS = { "mk1", "mk1_tiberium", "loopGraph", "light_fuel",
+        "light_fuel_hydrogen_loop", "230_platline", "palladium_line", "nanocircuits" };
 
     /**
      * Machine profiles are normally registered during mod init; headless tests need the default
@@ -178,6 +178,21 @@ public final class GtnhFlowLoader {
      * for those modes - the future AUT solver mode replaces this with a real target constraint,
      * which is why the pins stay surfaced on {@link LoadedChart#pins()}.
      */
+    /**
+     * Undoes {@link #applyTargetPins} for AUTO-mode tests: that anchor is the OUTPUT/INPUT
+     * approximation, and AUTO takes the same pins as real constraints instead, so a chart it is
+     * given must carry only its wiring.
+     */
+    public static void clearTargetAnchors(final LoadedChart chart) {
+        for (final Pin pin : chart.pins()) {
+            if (!"target".equals(pin.kind())) continue;
+            final Node node = chart.machines()
+                .get(pin.machineIndex());
+            node.machineConfig.setMachineCount(1);
+            node.setMachineCountFixed(false);
+        }
+    }
+
     private static void applyTargetPins(final List<Node> machines, final List<Pin> pins) {
         for (final Pin pin : pins) {
             if (!"target".equals(pin.kind())) continue;
