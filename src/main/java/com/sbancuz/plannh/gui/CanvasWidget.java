@@ -390,13 +390,17 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         final int offsetX = anchorX - layoutMinX;
         final int offsetY = anchorY - layoutMinY;
 
-        for (final Node node : graph.getNodes()) {
-            final int[] pos = positions.get(node.id);
-            if (pos == null) continue;
-            node.x = pos[0] + offsetX;
-            node.y = pos[1] + offsetY;
-        }
-        applyNodePositions();
+        // Bracketed only from here: a layout that threw or produced nothing left the chart alone,
+        // and an undo entry for a no-op move would make the button look like it did something.
+        PlanAPI.recordEdit(graph, () -> {
+            for (final Node node : graph.getNodes()) {
+                final int[] pos = positions.get(node.id);
+                if (pos == null) continue;
+                node.x = pos[0] + offsetX;
+                node.y = pos[1] + offsetY;
+            }
+            applyNodePositions();
+        });
     }
 
     private void applyNodePositions() {
