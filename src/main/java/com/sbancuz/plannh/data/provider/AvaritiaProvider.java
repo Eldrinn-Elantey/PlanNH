@@ -24,7 +24,7 @@ import fox.spiteful.avaritia.compat.nei.CompressionHandler;
 public final class AvaritiaProvider implements PropertyProvider {
 
     public static final RecipeProperty<Integer> COMPRESSION_COST = SummaryProperty
-        .<Integer>builder("compression_cost", 0)
+        .<Integer>builder("avaritia.compression_cost", 0)
         .build();
 
     @Override

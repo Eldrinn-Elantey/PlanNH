@@ -33,10 +33,10 @@ import codechicken.nei.recipe.TemplateRecipeHandler;
 
 public final class BloodMagicProvider implements PropertyProvider {
 
-    public static final RecipeProperty<Integer> LP_AMOUNT = SummaryProperty.builder("lp_amount", 0)
+    public static final RecipeProperty<Integer> LP_AMOUNT = SummaryProperty.builder("bloodmagic.lp_amount", 0)
         .build();
 
-    public static final RecipeProperty<Integer> LP_TIER = RecipeProperty.builder("lp_tier", 0)
+    public static final RecipeProperty<Integer> LP_TIER = RecipeProperty.builder("bloodmagic.lp_tier", 0)
         .build();
 
     @Nullable

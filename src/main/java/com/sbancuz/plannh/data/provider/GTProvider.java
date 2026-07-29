@@ -49,21 +49,21 @@ public class GTProvider implements PropertyProvider {
     // Vanilla furnace: base cook time of 200 ticks (10 seconds)
     private static final int FURNACE_COOK_TICKS = 200;
 
-    public static final RecipeProperty<Integer> SPECIAL_VALUE = RecipeProperty.<Integer>builder("special_value", 0)
+    public static final RecipeProperty<Integer> SPECIAL_VALUE = RecipeProperty.<Integer>builder("gt.special_value", 0)
         .build();
-    static final RecipeProperty<Integer> GLASS_TIER = RecipeProperty.<Integer>builder("bartworks.glass_tier", 3)
+    static final RecipeProperty<Integer> GLASS_TIER = RecipeProperty.<Integer>builder("gt.bartworks.glass_tier", 3)
         .build();
-    public static final RecipeProperty<Integer> SIEVERT = RecipeProperty.<Integer>builder("bartworks.sievert", 0)
+    public static final RecipeProperty<Integer> SIEVERT = RecipeProperty.<Integer>builder("gt.bartworks.sievert", 0)
         .build();
     public static final RecipeProperty<Boolean> SIEVERT_EXACT = RecipeProperty
-        .<Boolean>builder("bartworks.sievert_exact", false)
+        .<Boolean>builder("gt.bartworks.sievert_exact", false)
         .build();
-    public static final RecipeProperty<Integer> MASS = RecipeProperty.<Integer>builder("bartworks.mass", 0)
+    public static final RecipeProperty<Integer> MASS = RecipeProperty.<Integer>builder("gt.bartworks.mass", 0)
         .build();
 
-    public static final RecipeProperty<Long> TOTAL_EU = SummaryProperty.<Long>builder("total_eu", 0L)
+    public static final RecipeProperty<Long> TOTAL_EU = SummaryProperty.<Long>builder("gt.total_eu", 0L)
         .build();
-    public static final RecipeProperty<Long> EU_PER_TICK = SummaryProperty.<Long>builder("eu_per_tick", 0L)
+    public static final RecipeProperty<Long> EU_PER_TICK = SummaryProperty.<Long>builder("gt.eu_per_tick", 0L)
         .build();
 
     public static final RecipeProperty<Integer> COIL_HEAT = RecipeProperty.<Integer>builder("gt.coil_heat", 0)

@@ -40,7 +40,7 @@ public class EnderIOProvider implements PropertyProvider {
     private static final int RF_PER_TICK = 80;
     private static final String PROFILE_ID = "enderio";
 
-    public static final RecipeProperty<Integer> EXPERIENCE = RecipeProperty.<Integer>builder("experience", 0)
+    public static final RecipeProperty<Integer> EXPERIENCE = RecipeProperty.<Integer>builder("enderio.experience", 0)
         .build();
 
     @Nullable
