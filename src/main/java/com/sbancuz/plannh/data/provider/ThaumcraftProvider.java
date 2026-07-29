@@ -43,16 +43,19 @@ public class ThaumcraftProvider implements PropertyProvider {
     public static final RecipeProperty<int[]> VIS_COST = SummaryProperty.builder("thaumcraft.vis_cost", new int[6])
         .build();
 
-    public static final RecipeProperty<Integer> INSTABILITY = RecipeProperty.<Integer>builder("thaumcraft.instability", 0)
+    public static final RecipeProperty<Integer> INSTABILITY = RecipeProperty
+        .<Integer>builder("thaumcraft.instability", 0)
         .build();
 
     public static final RecipeProperty<Integer> TOTAL_VIS = RecipeProperty.<Integer>builder("thaumcraft.total_vis", 0)
         .build();
 
-    public static final RecipeProperty<String> RESEARCH_KEY = RecipeProperty.<String>builder("thaumcraft.research_key", "")
+    public static final RecipeProperty<String> RESEARCH_KEY = RecipeProperty
+        .<String>builder("thaumcraft.research_key", "")
         .build();
 
-    public static final RecipeProperty<Integer> NUM_COMPONENTS = RecipeProperty.<Integer>builder("thaumcraft.num_components", 0)
+    public static final RecipeProperty<Integer> NUM_COMPONENTS = RecipeProperty
+        .<Integer>builder("thaumcraft.num_components", 0)
         .build();
 
     private static final String[] PRIMAL_TAGS = { "aer", "terra", "ignis", "aqua", "ordo", "perditio" };

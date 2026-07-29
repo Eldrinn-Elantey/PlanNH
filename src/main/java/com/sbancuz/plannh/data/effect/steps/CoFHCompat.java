@@ -9,5 +9,6 @@ public class CoFHCompat {
         .build();
 
     public static final RecipeProperty<Integer> RF_PER_T = SummaryProperty.<Integer>builder("cofh.rf_per_t", 0)
+        .perSec(true)
         .build();
 }

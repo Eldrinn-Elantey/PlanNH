@@ -25,6 +25,7 @@ import gregtech.nei.GTNEIDefaultHandler;
 public class GTSteamProvider implements PropertyProvider {
 
     public static final RecipeProperty<Long> STEAM_EU_PERT = SummaryProperty.<Long>builder("gt.steam_eu_pert", 0L)
+        .perSec(true)
         .build();
     public static final RecipeProperty<Long> TOTAL_STEAM_EU = SummaryProperty.<Long>builder("gt.total_steam_eu", 0L)
         .build();

@@ -17,6 +17,10 @@ public class RecipeProperty<T> {
     @Getter
     private final T defaultValue;
 
+    @Getter
+    @lombok.Builder.Default
+    private final boolean perSec = false;
+
     @lombok.Builder.Default
     private final Function<T, String> displayFormatter = null;
 

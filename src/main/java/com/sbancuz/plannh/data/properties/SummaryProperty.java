@@ -15,7 +15,7 @@ public class SummaryProperty<T> extends RecipeProperty<T> {
         return amountFormatter.apply(value);
     }
 
-    public static <B extends Number> SummaryPropertyBuilder<B, ?, ?> builder(final String key, final B defaultValue) {
+    public static <B> SummaryPropertyBuilder<B, ?, ?> builder(final String key, final B defaultValue) {
         return SummaryProperty.<B>emptyBuilder()
             .key(key)
             .defaultValue(defaultValue);
