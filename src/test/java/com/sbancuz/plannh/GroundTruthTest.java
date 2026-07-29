@@ -279,6 +279,40 @@ class GroundTruthTest {
     }
 
     @Test
+    void solutionsScaleWithTheirPins() {
+        // The model is homogeneous: scaling every pin by f must scale the whole solution by f and
+        // leave the structure alone. Absolute tolerances broke this - a chart pinned at a tenth of
+        // the rate used to come back with a different gate count, or with most machines idle.
+        for (final String name : new String[] { "mk1", "palladium_line" }) {
+            Integer gates = null;
+            Double normalizedQuantity = null;
+            for (final double f : new double[] { 1.0, 0.5, 0.1, 0.01, 0.001 }) {
+                final LoadedChart chart = GtnhFlowLoader.load(name);
+                GtnhFlowLoader.clearTargetAnchors(chart);
+                final Map<UUID, Double> scaled = new HashMap<>();
+                targetPins(chart).forEach((id, extent) -> scaled.put(id, extent * f));
+
+                final Result result = AutoBalancer.solve(chart.graph(), scaled);
+                assertTrue(result.isSuccess(), () -> name + " @" + f + " failed: " + result.failure());
+                final Solution s = result.solution();
+
+                if (gates == null) {
+                    gates = s.openGates();
+                    normalizedQuantity = s.externalQuantity() / f;
+                } else {
+                    assertEquals(gates.intValue(), s.openGates(), () -> name + " @" + f + " changed gate count");
+                    assertEquals(
+                        normalizedQuantity,
+                        s.externalQuantity() / f,
+                        Math.max(1e-6, normalizedQuantity * 1e-4),
+                        () -> name + " @" + f + " changed external quantity");
+                }
+                assertAllMachinesRun(chart, s);
+            }
+        }
+    }
+
+    @Test
     void staleEdgePortIndex_isDroppedRatherThanCrashing() {
         // Saved edges keep their port indices; the port lists come back from the live recipe
         // handler and can be shorter. The balance runs from draw(), so an out-of-range index has

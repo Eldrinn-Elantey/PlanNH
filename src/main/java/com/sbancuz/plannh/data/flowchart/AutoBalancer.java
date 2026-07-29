@@ -159,6 +159,10 @@ public final class AutoBalancer {
             if (floored.failure == null) {
                 attempt = floored;
                 floorsUsed = true;
+            } else {
+                // Pass 1 stands, but it leaves machines at zero - which reads on screen exactly
+                // like a chart that was never balanced. Say so instead of shipping the silence.
+                attempt = attempt.plusNote(ctx.idleCount(attempt.extents) + " machines are idle: " + floored.failure);
             }
         }
 
@@ -742,6 +746,15 @@ public final class AutoBalancer {
          * uniform extent floor 1000x below the smallest observed running rate, so the floor can
          * never bind above a plausible natural rate.
          */
+        /** Machines the solution leaves at zero, ignoring any the user pinned there. */
+        int idleCount(final double[] extents) {
+            int idle = 0;
+            for (int m = 0; m < machines.size(); m++) {
+                if (machines.get(m).pinnedExtent == null && extents[m] <= USE_EPS_DETECT) idle++;
+            }
+            return idle;
+        }
+
         double[] floorsFrom(final double[] extents) {
             boolean anyIdle = false;
             double minRunning = Double.MAX_VALUE;
@@ -770,24 +783,41 @@ public final class AutoBalancer {
             return cost;
         }
 
+        /**
+         * What counts as no flow, for one solution. The model is homogeneous - scaling every pin
+         * scales every flow - so "negligible" only means anything next to the other flows in the
+         * same solution. An absolute floor reads a small chart's real externals as noise, drops
+         * them from the support, and leaves stage 2 pinning those ports to zero: infeasible, and
+         * reported as a budget timeout.
+         */
+        private static double zeroTolerance(final double[] values) {
+            double max = 0;
+            for (final double v : values) {
+                max = Math.max(max, Math.abs(v));
+            }
+            return ZERO * Math.max(max, Double.MIN_NORMAL);
+        }
+
         /** The gate support (gate indices) carried by the given per-port external flows. */
         Set<Integer> gateSupport(final double[] externals) {
             final double[] gateFlow = new double[gates.size()];
             for (int p = 0; p < externals.length; p++) {
                 gateFlow[portGate[p]] += externals[p];
             }
+            final double tol = zeroTolerance(gateFlow);
             final Set<Integer> support = new HashSet<>();
             for (int g = 0; g < gateFlow.length; g++) {
-                if (gateFlow[g] > ZERO) support.add(g);
+                if (gateFlow[g] > tol) support.add(g);
             }
             return support;
         }
 
         /** Ports whose externals carried flow, as public refs (for enumeration display). */
         Set<PortRef> flowPortRefs(final double[] externals) {
+            final double tol = zeroTolerance(externals);
             final Set<PortRef> refs = new HashSet<>();
             for (int p = 0; p < externals.length; p++) {
-                if (externals[p] <= ZERO) continue;
+                if (externals[p] <= tol) continue;
                 final ConnectedPort port = connectedPorts.get(p);
                 refs.add(new PortRef(machines.get(port.machine()).node.id, port.portIndex(), port.input()));
             }
@@ -1061,9 +1091,21 @@ public final class AutoBalancer {
 
         private Attempt(final StageSolve s3, final Set<Integer> support, final boolean certified,
             final List<String> notes, final String failure) {
-            this.extents = s3 == null ? null : s3.extents;
-            this.flows = s3 == null ? null : s3.flows;
-            this.externals = s3 == null ? null : s3.externals;
+            this(
+                s3 == null ? null : s3.extents,
+                s3 == null ? null : s3.flows,
+                s3 == null ? null : s3.externals,
+                support,
+                certified,
+                notes,
+                failure);
+        }
+
+        private Attempt(final double[] extents, final double[] flows, final double[] externals,
+            final Set<Integer> support, final boolean certified, final List<String> notes, final String failure) {
+            this.extents = extents;
+            this.flows = flows;
+            this.externals = externals;
             this.support = support;
             this.certified = certified;
             this.notes = notes;
@@ -1077,6 +1119,12 @@ public final class AutoBalancer {
 
         static Attempt failed(final String reason) {
             return new Attempt(null, Set.of(), false, List.of(), reason);
+        }
+
+        Attempt plusNote(final String note) {
+            final List<String> merged = new ArrayList<>(notes);
+            merged.add(note);
+            return new Attempt(extents, flows, externals, support, certified, List.copyOf(merged), failure);
         }
     }
 }
