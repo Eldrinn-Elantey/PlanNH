@@ -85,18 +85,7 @@ public class GTProvider implements PropertyProvider {
         RecipePropertyAPI.registerExtractor(GTNEIDefaultHandler.class, this);
 
         MachineProfileRegistry.register(PROFILE);
-    }
-
-    public static void base(MachineProfile.Builder b) {
-        b.setting(Settings.VOLTAGE.def());
-        b.setting(Settings.AMP.def());
-        b.setting(Settings.SPEED.def());
-        b.setting(
-            Settings.PARALLELS.def()
-                .withVisibility((ctx, s) -> !isEoH(ctx)));
-        b.setting(Settings.MACHINES.def());
-        b.setting(Settings.PERFECT_OC.def());
-        b.setting(Settings.GT_MULTIBLOCK.def());
+        new GTSteamProvider().register();
     }
 
     static BiPredicate<RecipeContext, Map<String, Object>> multiblockOnly() {
@@ -116,7 +105,15 @@ public class GTProvider implements PropertyProvider {
     }
 
     private static final MachineProfile PROFILE = MachineProfile.builder("gregtech:unified", "GT Unified")
-        .settings(GTProvider::base)
+        .setting(Settings.VOLTAGE.def())
+        .setting(Settings.AMP.def())
+        .setting(Settings.SPEED.def())
+        .setting(
+            Settings.PARALLELS.def()
+                .withVisibility((ctx, s) -> !isEoH(ctx)))
+        .setting(Settings.MACHINES.def())
+        .setting(Settings.PERFECT_OC.def())
+        .setting(Settings.GT_MULTIBLOCK.def())
         .setting(
             Settings.LASER_OC.def()
                 .withVisibility(multiblockOnly()))
@@ -224,14 +221,18 @@ public class GTProvider implements PropertyProvider {
 
     @Override
     @Nonnull
-    public Map<RecipeProperty<?>, Object> extract(final Node node, final IRecipeHandler handler, final int recipeIndex) {
+    public Map<RecipeProperty<?>, Object> extract(final Node node, final IRecipeHandler handler,
+        final int recipeIndex) {
+        return extractGTRecipe(node, handler, recipeIndex);
+    }
+
+    public static Map<RecipeProperty<?>, Object> extractGTRecipe(final Node node, final IRecipeHandler handler,
+        final int recipeIndex) {
         final Map<RecipeProperty<?>, Object> props = new HashMap<>();
         GTRecipe r;
         RecipeMap<?> gthMap = null;
 
         if (handler instanceof final FurnaceRecipeHandler fh) {
-            props.putAll(PropertyProvider.super.extract(node, handler, recipeIndex));
-
             final List<TemplateRecipeHandler.CachedRecipe> fRecipes = RecipeHandlerAccess.getArecipes(fh);
             props.put(RecipePropertyAPI.DURATION_TICKS, FURNACE_COOK_TICKS);
 
