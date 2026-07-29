@@ -25,7 +25,7 @@ class BalancerSmokeTest {
 
     // Target pins anchor the sink counts, which is what makes the big charts expensive:
     // nanocircuits (400 assembly lines for 1/s) takes ~19s anchored against ~6.7s un-anchored.
-    // The budget is a guard against hangs, not a performance target.
+    // TODO: 30s is the relaxed beta figure; bring it back down as solve times allow.
     private static final Duration BUDGET = Duration.ofSeconds(30);
 
     static String[] corpus() {
