@@ -4,6 +4,11 @@
 // design-time metamodels (model/** and schema/**), Eclipse plugin descriptors, and docs;
 // all dead weight at runtime, and the descriptors would sit at the jar's top level.
 tasks.matching { it.name == 'shadowJar' }.configureEach {
+    // Three ELK jars each declare an ILayoutMetaDataProvider service. Without this, shadow keeps
+    // one of the three and leaves its filename and contents on the original package names, so a
+    // ServiceLoader in the relocated ELK finds nothing - in the shipped jar only, never in dev.
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    mergeServiceFiles()
     exclude 'images/**'
     exclude 'model/**'
     exclude 'schema/**'
