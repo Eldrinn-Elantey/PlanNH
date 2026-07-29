@@ -42,8 +42,10 @@ import com.sbancuz.plannh.data.flowchart.SlotSet;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
 import com.sbancuz.plannh.gui.components.CycleButton;
+import com.sbancuz.plannh.nei.NEIPlanConfig;
 
 import codechicken.nei.LayoutManager;
+import codechicken.nei.NEIClientConfig;
 import codechicken.nei.guihook.GuiContainerManager;
 
 public class FlowchartScreen extends ModularScreen {
@@ -125,7 +127,10 @@ public class FlowchartScreen extends ModularScreen {
         mainColumn.child(
             Flow.row()
                 .mainAxisAlignment(Alignment.MainAxis.SPACE_BETWEEN)
-                .height(16)
+                // MUI2's default widget height is 18: a 16-tall row makes the coverChildren
+                // button rows overflow the cross axis, and SimpleFlow then logs a padding
+                // warning for each of them on EVERY relayout (the log-spam bug).
+                .height(18)
                 .fullWidth()
                 .child(
                     Flow.row()
@@ -164,6 +169,22 @@ public class FlowchartScreen extends ModularScreen {
                         .coverChildren()
                         .childPadding(2)
                         .child(
+                            new ButtonWidget<>().overlay(
+                                IKey.str("\u21ba")
+                                    .scale(2f))
+                                .onMousePressed(_ -> {
+                                    canvas.undoGraph();
+                                    return true;
+                                }))
+                        .child(
+                            new ButtonWidget<>().overlay(
+                                IKey.str("\u21bb")
+                                    .scale(2f))
+                                .onMousePressed(_ -> {
+                                    canvas.redoGraph();
+                                    return true;
+                                }))
+                        .child(
                             new ButtonWidget<>().overlay(IKey.str("AL"))
                                 .tooltipStatic(t -> t.addLine(IKey.str("Auto layout")))
                                 .onMousePressed(_ -> {
@@ -181,8 +202,8 @@ public class FlowchartScreen extends ModularScreen {
                                 }))
                         .child(
                             new CycleButton<>(BalanceMode.class).overlay(v -> IKey.str(CycleButton.shortName(v)))
-                                .current(
-                                    canvas.getGraph()
+                                .source(
+                                    () -> canvas.getGraph()
                                         .getBalanceMode())
                                 .onCycle(next -> {
                                     canvas.getGraph()
@@ -249,6 +270,21 @@ public class FlowchartScreen extends ModularScreen {
     public void onClose() {
         PlanAPI.save();
         super.onClose();
+    }
+
+    // Screen level, not canvas level: the panel only offers keys to the hovered widget, so the
+    // canvas never sees them while the cursor sits on the toolbar or a text field holds focus.
+    // isKeyHashDown reads the live LWJGL event, which is still the one being dispatched here.
+    @Override
+    public boolean onKeyPressed(final char typedChar, final int keyCode) {
+        final boolean undo = NEIClientConfig.isKeyHashDown(NEIPlanConfig.ConfigUndoKey.KEY);
+        if (undo || NEIClientConfig.isKeyHashDown(NEIPlanConfig.ConfigRedoKey.KEY)
+            || NEIClientConfig.isKeyHashDown(NEIPlanConfig.ConfigRedoAltKey.KEY)) {
+            if (undo) canvas.undoGraph();
+            else canvas.redoGraph();
+            return true;
+        }
+        return super.onKeyPressed(typedChar, keyCode);
     }
 
     @Override

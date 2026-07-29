@@ -421,19 +421,20 @@ public final class Serializer {
     }
 
     private static void jsonToMachineConfig(final JsonObject obj, final MachineConfig cfg) {
+        // "profile" is omitted for the default profile, but its settings are still written.
         if (obj.has("profile")) {
             cfg.profileId = obj.get("profile")
                 .getAsString();
-            if (obj.has("settings")) {
-                final JsonObject settingsObj = obj.getAsJsonObject("settings");
-                for (final Map.Entry<String, JsonElement> entry : settingsObj.entrySet()) {
-                    final JsonElement el = entry.getValue();
-                    if (el.isJsonPrimitive()) {
-                        final var prim = el.getAsJsonPrimitive();
-                        if (prim.isBoolean()) cfg.settings.put(entry.getKey(), prim.getAsBoolean());
-                        else if (prim.isNumber()) cfg.settings.put(entry.getKey(), prim.getAsInt());
-                        else cfg.settings.put(entry.getKey(), prim.getAsString());
-                    }
+        }
+        if (obj.has("settings")) {
+            final JsonObject settingsObj = obj.getAsJsonObject("settings");
+            for (final Map.Entry<String, JsonElement> entry : settingsObj.entrySet()) {
+                final JsonElement el = entry.getValue();
+                if (el.isJsonPrimitive()) {
+                    final var prim = el.getAsJsonPrimitive();
+                    if (prim.isBoolean()) cfg.settings.put(entry.getKey(), prim.getAsBoolean());
+                    else if (prim.isNumber()) cfg.settings.put(entry.getKey(), prim.getAsInt());
+                    else cfg.settings.put(entry.getKey(), prim.getAsString());
                 }
             }
         }
