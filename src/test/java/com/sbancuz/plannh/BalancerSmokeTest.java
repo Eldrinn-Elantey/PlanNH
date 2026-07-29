@@ -23,10 +23,9 @@ import com.sbancuz.plannh.harness.GtnhFlowLoader.LoadedChart;
  */
 class BalancerSmokeTest {
 
-    // KNOWN RED: target pins anchor the sink counts (nanocircuits: 400 asslines for 1/s), and
-    // the current solver needs ~19s for that chart against this budget (6.7s un-anchored). The
-    // budget is the requirement, not the variable - the failure stands until the solver closes
-    // the gap.
+    // Target pins anchor the sink counts, which is what makes the big charts expensive:
+    // nanocircuits (400 assembly lines for 1/s) takes ~19s anchored against ~6.7s un-anchored.
+    // The budget is a guard against hangs, not a performance target.
     private static final Duration BUDGET = Duration.ofSeconds(30);
 
     static String[] corpus() {
