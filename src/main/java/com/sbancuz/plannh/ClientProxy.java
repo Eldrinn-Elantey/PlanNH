@@ -56,12 +56,9 @@ public class ClientProxy extends CommonProxy {
             .bus()
             .register(this);
 
-        // ELK's first layout pays for its class loading and metadata registration; warm it up
-        // off-thread so the first Auto-Layout click doesn't freeze the game.
-        final Thread elkWarmup = new Thread(AutoLayout::warmup, "PlanNH ELK warmup");
-        elkWarmup.setDaemon(true);
-        elkWarmup.setPriority(Thread.MIN_PRIORITY);
-        elkWarmup.start();
+        // ELK's first layout pays for its class loading and metadata registration; spend it
+        // during init so the first Auto-Layout click doesn't freeze the game.
+        AutoLayout.warmup();
     }
 
     @SubscribeEvent

@@ -96,13 +96,11 @@ public final class AutoLayout {
     private AutoLayout() {}
 
     /** Guards the one-time ELK warm-up. */
-    private static volatile boolean warmedUp;
+    private static boolean warmedUp;
 
     /**
      * Runs one tiny layout so ELK's class loading and metadata registration happen off the
-     * first real click. Safe to race with {@link #layout}: both run the same stateless static
-     * path, the flag only skips repeat warm-ups. Failures are ignored - the first real layout
-     * would surface them anyway.
+     * first real click. Failures are ignored - the first real layout would surface them anyway.
      */
     public static void warmup() {
         if (warmedUp) return;
