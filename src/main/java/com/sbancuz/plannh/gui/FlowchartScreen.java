@@ -186,7 +186,11 @@ public class FlowchartScreen extends ModularScreen {
                             new ButtonWidget<>().overlay(IKey.str("Ops"))
                                 .onMousePressed(_ -> {
                                     final Graph g = canvas.getGraph();
-                                    if (g.getBalanceMode() != BalanceMode.NONE) {
+                                    // AUTO reports exact per-second rates and ignores opsMode, but
+                                    // the summary would still rescale to per-cycle totals, netting
+                                    // recycled ingredients into phantom lines.
+                                    if (g.getBalanceMode() == BalanceMode.OUTPUT
+                                        || g.getBalanceMode() == BalanceMode.INPUT) {
                                         g.setOpsMode(!g.isOpsMode());
                                         PlanAPI.save();
                                     }

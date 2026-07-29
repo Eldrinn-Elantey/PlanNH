@@ -16,14 +16,17 @@ public final class GuiHelper {
 
     /**
      * Machine-count display: integral counts stay bare ("4"), fractional counts keep two
-     * decimals ("3.12", "0.17") so balanced charts stay auditable by hand.
+     * decimals ("3.12", "0.17") so balanced charts stay auditable by hand. A count that is
+     * genuinely nonzero never collapses to "0" - a machine that runs 0.001 of the time is still
+     * wired in, and rendering it idle sends the user hunting for a break that isn't there.
      */
     public static String formatCount(final double count) {
         final long rounded = Math.round(count);
-        if (Math.abs(count - rounded) < 5e-3) {
+        if (Math.abs(count - rounded) < 5e-3 && (rounded != 0 || count == 0)) {
             return String.valueOf(rounded);
         }
-        return String.format("%.2f", count);
+        return count > 0 && count < 0.01 ? trimTrailingZeros(String.format("%.5f", count))
+            : String.format("%.2f", count);
     }
 
     public static String trimTrailingZeros(final String s) {

@@ -61,6 +61,9 @@ class BalancerSmokeTest {
             () -> Balancer.balance(chart.graph(), BalanceMode.AUTO, false),
             name + " exceeded the auto-balance budget");
         assertNotNull(result);
+        // A failed solve also fills nodeBalances - with zeros - so presence alone would pass even
+        // if AUTO never solved anything.
+        assertTrue(result.totalOperations() > 0, () -> name + " produced no operations, notes: " + result.notes());
         for (final Node node : chart.machines()) {
             assertTrue(
                 result.nodeBalances()
