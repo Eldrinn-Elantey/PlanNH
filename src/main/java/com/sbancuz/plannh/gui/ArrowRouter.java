@@ -123,7 +123,9 @@ public final class ArrowRouter {
             final Request q = requests.get(i);
             // Ports closer than two anchor stubs cannot satisfy the leave-right/arrive-right
             // state machine without looping around themselves; draw the canonical Z directly.
-            if (q.dx - q.sx < 2 * stub && Math.abs(q.dy - q.sy) < 10 * baseCell) {
+            // Forward edges only: for a backward edge the gap is negative, and the Z would cut
+            // straight through every node between the two ports.
+            if (q.dx > q.sx && q.dx - q.sx < 2 * stub && Math.abs(q.dy - q.sy) < 10 * baseCell) {
                 result.put(q.key, fallback(q, stub));
                 continue;
             }
