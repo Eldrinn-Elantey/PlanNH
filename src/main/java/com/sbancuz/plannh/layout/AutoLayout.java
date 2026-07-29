@@ -40,8 +40,8 @@ import com.sbancuz.plannh.gui.PortGeometry;
  * <p>
  * Uses ELK layered with an option set tuned on real recipe charts: DEPTH_FIRST cycle
  * breaking (halves crossings on recycle-heavy charts vs the GREEDY default), NETWORK_SIMPLEX
- * layering, thoroughness 30 and post-compaction. NETWORK_SIMPLEX node placement blows up past a
- * few hundred nodes, so large graphs fall back to BRANDES_KOEPF.
+ * layering, thoroughness 30 and post-compaction. NETWORK_SIMPLEX node placement costs grow
+ * explosively with edge density, so anything past a small chart falls back to BRANDES_KOEPF.
  *
  * <p>
  * Layered engines consume nodes in model order, so the same chart built in a different NEI click
@@ -74,8 +74,14 @@ public final class AutoLayout {
         int outputCount();
     }
 
-    /** Nodes above this count switch to the scalable placement strategy. */
+    /** Above this count ELK's model-order tie-breaking is enabled to keep big charts stable. */
     private static final int BIG_GRAPH_NODES = 300;
+    // NETWORK_SIMPLEX placement is worth its cost only on small charts. Measured on chain +
+    // 65% random cross links, 4 ports per node: 60 nodes/97 edges 0.4s, 80/130 1.0s, 100/163
+    // 4.6s, 150/245 34s, and 200/327 dies in ELK's recursive NGraph.dfs with a StackOverflowError.
+    // BRANDES_KOEPF is flat over the same range (0.2s at 60, 0.6s at 150, 3.5s at 320).
+    private static final int NS_MAX_NODES = 60;
+    private static final int NS_MAX_EDGES = 120;
     // Compact on purpose. The arrow router inflates nodes by a 12-unit margin per side, so
     // layer spacing must stay above ~30 or the inter-layer corridors close entirely.
     private static final double LAYER_SPACING = 50.0;
@@ -158,7 +164,7 @@ public final class AutoLayout {
         root.setProperty(LayeredOptions.LAYERING_STRATEGY, LayeringStrategy.NETWORK_SIMPLEX);
         root.setProperty(
             LayeredOptions.NODE_PLACEMENT_STRATEGY,
-            nodes.size() <= BIG_GRAPH_NODES ? NodePlacementStrategy.NETWORK_SIMPLEX
+            nodes.size() <= NS_MAX_NODES && links.size() <= NS_MAX_EDGES ? NodePlacementStrategy.NETWORK_SIMPLEX
                 : NodePlacementStrategy.BRANDES_KOEPF);
         root.setProperty(
             LayeredOptions.COMPACTION_POST_COMPACTION_STRATEGY,
