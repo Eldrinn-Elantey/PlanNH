@@ -70,10 +70,9 @@ class BalancerSmokeTest {
     }
 
     /**
-     * Unlike OUTPUT/INPUT, AUTO must never write solved counts back into the node configs:
-     * viewing a chart is not editing it. And the reported operation count is the exact
-     * fractional machine count - no rounding anywhere, so every displayed number can be checked
-     * against every other by hand (integer ceilings made solutions unauditable in-game).
+     * AUTO must never write solved counts back into the node configs: viewing a chart is not
+     * editing it. The reported operation count is the exact fractional machine count - no
+     * rounding anywhere, so every displayed number can be checked against every other by hand.
      */
     @org.junit.jupiter.api.Test
     void autoModeReportsExactFractionalCounts_andDoesNotWriteThemBack() {

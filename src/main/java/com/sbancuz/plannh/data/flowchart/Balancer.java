@@ -14,6 +14,7 @@ import org.ojalgo.optimisation.Optimisation;
 import org.ojalgo.optimisation.Variable;
 
 import com.gtnewhorizons.angelica.shadow.javax.annotation.Nonnull;
+import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.RecipeProperty;
 
@@ -39,8 +40,6 @@ public final class Balancer {
         }
     }
 
-    private static final org.apache.logging.log4j.Logger LOG = org.apache.logging.log4j.LogManager.getLogger("plannh");
-
     @Nonnull
     public static BalanceResult balance(final Graph graph, final BalanceMode mode, final boolean opsMode) {
         return switch (mode) {
@@ -51,30 +50,28 @@ public final class Balancer {
     }
 
     /**
-     * AUTO mode: the lexicographic solver with fractional machine counts. Unlike the other
-     * modes, it never writes counts back into the node configs (viewing must not mutate the
-     * chart) and it logs its outcome - silent fallback is what made the other modes so hard to
-     * diagnose in-game.
+     * AUTO mode: the lexicographic solver with fractional machine counts. Never writes counts
+     * back into the node configs - viewing a chart must not mutate it - and logs every outcome,
+     * including the ones it recovers from.
      */
     @Nonnull
     private static BalanceResult balanceAuto(final Graph graph) {
         final AutoBalancer.Result result = AutoBalancer.solve(graph);
         if (!result.isSuccess()) {
             if (AutoBalancer.NO_PIN.equals(result.failure())) {
-                // Expected state, not an error: an unpinned chart is just wiring, so it gets NO
-                // quantities at all - showing numbers derived from an anchor the user never set
-                // is what made earlier solutions untraceable.
-                LOG.info("Auto balance idle: {}", result.failure());
+                // Expected state, not an error: an unpinned chart is just wiring, so it gets
+                // no quantities at all rather than numbers derived from an anchor nobody set.
+                PlanNH.LOG.info("Auto balance idle: {}", result.failure());
                 return unbalanced(graph, result.failure());
             }
-            LOG.warn("Auto balance failed ({}); showing the chart without quantities", result.failure());
+            PlanNH.LOG.warn("Auto balance failed ({}); showing the chart without quantities", result.failure());
             return unbalanced(graph, "balance failed: " + result.failure());
         }
         final AutoBalancer.Solution solution = result.solution();
         for (final String note : solution.notes()) {
-            LOG.info("Auto balance: {}", note);
+            PlanNH.LOG.info("Auto balance: {}", note);
         }
-        LOG.info(
+        PlanNH.LOG.info(
             "Auto balance: {} machines, {} open gates, {}ms",
             solution.machineCounts()
                 .size(),
