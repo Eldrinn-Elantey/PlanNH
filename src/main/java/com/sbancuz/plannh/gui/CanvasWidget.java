@@ -6,11 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import net.minecraft.client.gui.GuiScreen;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 
 import com.cleanroommc.modularui.api.UpOrDown;
@@ -938,18 +935,6 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
 
     @Override
     public @NotNull Result onKeyPressed(final char typedChar, final int keyCode) {
-        if (GuiScreen.isCtrlKeyDown() && keyCode == Keyboard.KEY_Z) {
-            if (GuiScreen.isShiftKeyDown()) {
-                redoGraph();
-            } else {
-                undoGraph();
-            }
-            return Result.SUCCESS;
-        }
-        if (GuiScreen.isCtrlKeyDown() && keyCode == Keyboard.KEY_Y) {
-            redoGraph();
-            return Result.SUCCESS;
-        }
         if (editingGroupId != null) {
             /*
              * final GroupWidget gw = groupWidgets.get(editingGroupId);
