@@ -553,13 +553,8 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
                 if (configOpen) {
                     for (final ClickZone zone : configZones) {
                         if (zone.contains(mx, my)) {
-                            final String before = PlanAPI.undoHistory()
-                                .beginEdit(canvas.getGraph());
-                            zone.action.run();
-                            // Held [-]/[+] repeats mutate without their own bracket; they fold
-                            // into this entry, so one undo reverts the whole hold.
-                            PlanAPI.undoHistory()
-                                .commitEdit(before, canvas.getGraph());
+                            // Held repeats mutate outside this bracket and fold into this entry.
+                            PlanAPI.recordEdit(canvas.getGraph(), zone.action);
                             if (zone.repeat()) {
                                 zoneHeld = true;
                                 heldZoneMx = mx;

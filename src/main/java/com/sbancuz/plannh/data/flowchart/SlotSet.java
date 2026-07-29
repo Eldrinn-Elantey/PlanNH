@@ -14,10 +14,7 @@ public class SlotSet {
 
         public String name;
         public Graph graph;
-        // Each slot keeps its own edit history, so switching slots neither loses nor mixes
-        // undo state. Dies with the slot / world session; never serialized. Lives on the data
-        // side rather than the screen because edits also arrive from the NEI overlay while no
-        // flowchart screen exists.
+        /** Per-slot and session-only: edits also arrive from the NEI overlay with no screen open. */
         public final transient UndoHistory undoHistory = new UndoHistory();
 
         public Slot(final String name, final Graph graph) {
@@ -33,24 +30,26 @@ public class SlotSet {
     public boolean summaryCollapsed = false;
     public SummaryMode summaryMode = SummaryMode.CYCLES;
 
-    public Graph getActiveGraph() {
+    /** Clamps activeSlot and guarantees a slot exists. */
+    private Slot activeSlot() {
         if (slots.isEmpty()) {
             slots.add(new Slot("Slot 1", new Graph()));
         }
         if (activeSlot < 0 || activeSlot >= slots.size()) {
             activeSlot = 0;
         }
-        return slots.get(activeSlot).graph;
+        return slots.get(activeSlot);
     }
 
-    /** Replaces the active slot's graph; used by undo/redo to swap in a restored snapshot. */
+    public Graph getActiveGraph() {
+        return activeSlot().graph;
+    }
+
     public void setActiveGraph(final Graph graph) {
-        getActiveGraph(); // clamps activeSlot and guarantees a slot exists
-        slots.get(activeSlot).graph = graph;
+        activeSlot().graph = graph;
     }
 
     public UndoHistory getActiveUndoHistory() {
-        getActiveGraph(); // clamps activeSlot and guarantees a slot exists
-        return slots.get(activeSlot).undoHistory;
+        return activeSlot().undoHistory;
     }
 }

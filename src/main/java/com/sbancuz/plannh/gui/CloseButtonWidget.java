@@ -28,19 +28,12 @@ public class CloseButtonWidget extends ButtonWidget<CloseButtonWidget> {
 
     @Override
     public @NotNull Result onMousePressed(int mouseButton) {
-        if (parent.getCanvas()
-            .isMouseInsideCanvas()) {
-            final String before = PlanAPI.undoHistory()
-                .beginEdit(
-                    parent.getCanvas()
-                        .getGraph());
-            ((ParentWidget<?>) parent.getParent()).remove(parent);
-            parent.removeFromGraph();
-            PlanAPI.undoHistory()
-                .commitEdit(
-                    before,
-                    parent.getCanvas()
-                        .getGraph());
+        final CanvasWidget canvas = parent.getCanvas();
+        if (canvas.isMouseInsideCanvas()) {
+            PlanAPI.recordEdit(canvas.getGraph(), () -> {
+                ((ParentWidget<?>) parent.getParent()).remove(parent);
+                parent.removeFromGraph();
+            });
         }
         return Result.SUCCESS;
     }

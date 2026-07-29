@@ -56,6 +56,14 @@ public final class PlanAPI {
         return getSlotSet().getActiveUndoHistory();
     }
 
+    /** Runs {@code edit} as one undo step; no-op edits leave no trace. */
+    public static void recordEdit(final Graph graph, final Runnable edit) {
+        final UndoHistory history = undoHistory();
+        final String before = history.beginEdit(graph);
+        edit.run();
+        history.commitEdit(before, graph);
+    }
+
     public static void save() {
         saveSlotSet(getSlotSet());
     }

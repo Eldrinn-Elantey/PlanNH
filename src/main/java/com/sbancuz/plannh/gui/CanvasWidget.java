@@ -111,19 +111,15 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         marginBottom(18);
 
         contextMenu2 = menu;
-        rebuildNodeWidgets();
-        rebuildNoteWidgets();
-        rebuildGroupWidgets();
+        rebuildWidgets();
     }
 
     public void removeNode(final UUID nodeId) {
-        final String before = PlanAPI.undoHistory()
-            .beginEdit(graph);
-        graph.removeNode(nodeId);
-        final RecipeNodeWidget w = nodeWidgets.remove(nodeId);
-        if (w != null) remove(w);
-        PlanAPI.undoHistory()
-            .commitEdit(before, graph);
+        PlanAPI.recordEdit(graph, () -> {
+            graph.removeNode(nodeId);
+            final RecipeNodeWidget w = nodeWidgets.remove(nodeId);
+            if (w != null) remove(w);
+        });
     }
 
     public void setPendingLookup(@Nullable final NodeLookupContext lookup) {
@@ -176,36 +172,38 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
 
     public void setGraph(final Graph newGraph) {
         this.graph = newGraph;
-        rebuildNodeWidgets();
-        rebuildNoteWidgets();
-        rebuildGroupWidgets();
+        rebuildWidgets();
     }
 
-    /** Swaps in the previous undo state, keeping the current camera. */
     public void undoGraph() {
+        // Ends any text-edit session first: its bracket must commit before the graph is swapped,
+        // and committing after the redo snapshot is taken would clear the redo stack again.
+        getContext().removeFocus();
         final UndoHistory history = PlanAPI.undoHistory();
         if (!history.canUndo()) return;
         adoptRestoredGraph(history.undo(graph));
     }
 
-    /** Swaps in the state the last undo backed out of, keeping the current camera. */
     public void redoGraph() {
+        getContext().removeFocus();
         final UndoHistory history = PlanAPI.undoHistory();
         if (!history.canRedo()) return;
         adoptRestoredGraph(history.redo(graph));
     }
 
-    // Snapshots store content only, so the current camera and grid preference carry over,
-    // and the active slot must adopt the restored graph or closing the GUI would save the
-    // pre-undo state right back.
+    // View and mode settings are not part of an edit, so they carry over from the live graph.
+    // The slot must adopt the restored graph, or the next save writes the pre-undo state back.
     private void adoptRestoredGraph(final Graph restored) {
         restored.setZoom(graph.getZoom());
         restored.setPanX(graph.getPanX());
         restored.setPanY(graph.getPanY());
         restored.setSnapToGrid(graph.isSnapToGrid());
+        restored.setBalanceMode(graph.getBalanceMode());
+        restored.setOpsMode(graph.isOpsMode());
         PlanAPI.getSlotSet()
             .setActiveGraph(restored);
         setGraph(restored);
+        PlanAPI.save();
     }
 
     public void moveGroupNodes(final UUID groupId, final int deltaX, final int deltaY) {
@@ -332,22 +330,17 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
          */
     }
 
-    public void rebuildNodeWidgets() {
+    /** One entry point, not three: removeAll() drops every child, so a partial rebuild loses the rest. */
+    public void rebuildWidgets() {
         removeAll();
         editingGroupId = null;
         nodeWidgets.clear();
+        flowchartWidgets.clear();
         for (final Node node : graph.getNodes()) {
             addNodeWidget(node);
             updateNodeGroupMembership(node);
         }
-        rebuildNoteWidgets();
-    }
-
-    public void rebuildNoteWidgets() {
         for (final Note note : graph.notes.values()) child(new NoteWidget(this, note));
-    }
-
-    public void rebuildGroupWidgets() {
         for (final Group group : graph.groups.values()) child(new GroupWidget2(this, group));
     }
 
@@ -724,11 +717,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
             if (!isMouseOverAnyNode(absMx, absMy) && !isMouseOverAnyGroup(absMx, absMy)) {
                 final Edge clicked = getEdgeAt(absMx, absMy);
                 if (clicked != null) {
-                    final String before = PlanAPI.undoHistory()
-                        .beginEdit(graph);
-                    graph.removeEdge(clicked.id);
-                    PlanAPI.undoHistory()
-                        .commitEdit(before, graph);
+                    PlanAPI.recordEdit(graph, () -> graph.removeEdge(clicked.id));
                     return Result.SUCCESS;
                 }
                 return Result.ACCEPT;
@@ -781,17 +770,15 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
                 final Node srcNode = graph.nodes.get(edgeSourceNodeId);
                 final Node dstNode = graph.nodes.get(edgeHoverNodeId);
                 if (srcNode != null && dstNode != null) {
-                    final String before = PlanAPI.undoHistory()
-                        .beginEdit(graph);
-                    graph.addEdge(
-                        new Edge(
-                            UUID.randomUUID(),
-                            edgeSourceNodeId,
-                            edgeHoverNodeId,
-                            edgeSourcePortIndex,
-                            edgeHoverPortIndex));
-                    PlanAPI.undoHistory()
-                        .commitEdit(before, graph);
+                    PlanAPI.recordEdit(
+                        graph,
+                        () -> graph.addEdge(
+                            new Edge(
+                                UUID.randomUUID(),
+                                edgeSourceNodeId,
+                                edgeHoverNodeId,
+                                edgeSourcePortIndex,
+                                edgeHoverPortIndex)));
                 }
             }
             creatingEdge = false;
@@ -888,31 +875,27 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
     }
 
     public void addNote() {
-        final String before = PlanAPI.undoHistory()
-            .beginEdit(graph);
-        final Note note = new Note();
-        note.setX(getMouseCanvasX());
-        note.setY(getMouseCanvasY());
+        PlanAPI.recordEdit(graph, () -> {
+            final Note note = new Note();
+            note.setX(getMouseCanvasX());
+            note.setY(getMouseCanvasY());
 
-        graph.notes.put(note.getId(), note);
-        child(new NoteWidget(this, note));
-        PlanAPI.undoHistory()
-            .commitEdit(before, graph);
+            graph.notes.put(note.getId(), note);
+            child(new NoteWidget(this, note));
+        });
 
         menuOpen = false;
     }
 
     public void addGroup() {
-        final String before = PlanAPI.undoHistory()
-            .beginEdit(graph);
-        final Group group = new Group();
-        group.setX(getMouseCanvasX());
-        group.setY(getMouseCanvasY());
+        PlanAPI.recordEdit(graph, () -> {
+            final Group group = new Group();
+            group.setX(getMouseCanvasX());
+            group.setY(getMouseCanvasY());
 
-        graph.groups.put(group.getId(), group);
-        child(new GroupWidget2(this, group));
-        PlanAPI.undoHistory()
-            .commitEdit(before, graph);
+            graph.groups.put(group.getId(), group);
+            child(new GroupWidget2(this, group));
+        });
 
         menuOpen = false;
     }

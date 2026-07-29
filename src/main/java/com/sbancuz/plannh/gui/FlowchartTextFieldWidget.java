@@ -49,11 +49,15 @@ public abstract class FlowchartTextFieldWidget extends BaseTextFieldWidget<Flowc
     public void onRemoveFocus(ModularGuiContext context) {
         super.onRemoveFocus(context);
         isEditing = false;
-        PlanAPI.undoHistory()
-            .commitEdit(
-                editToken,
-                parent.getCanvas()
-                    .getGraph());
+        // Focus is dropped after the click that took it, so a graph swap can dispose this widget
+        // first; the token then belongs to a graph that is no longer the one being edited.
+        if (isValid()) {
+            PlanAPI.undoHistory()
+                .commitEdit(
+                    editToken,
+                    parent.getCanvas()
+                        .getGraph());
+        }
         editToken = null;
     }
 
