@@ -341,7 +341,17 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
             anchorY = Math.min(anchorY, node.y);
         }
 
-        final Map<UUID, int[]> positions = AutoLayout.layout(nodeWidgets.values(), graph.getEdges());
+        // ELK reports bad option/graph combinations by throwing, and its node placement recurses
+        // per path, so a pathological chart can exhaust the stack. Both would otherwise leave a
+        // mouse handler and crash the client with the chart unsaved; the chart is worth more than
+        // the layout, so log and keep the current positions.
+        final Map<UUID, int[]> positions;
+        try {
+            positions = AutoLayout.layout(nodeWidgets.values(), graph.getEdges());
+        } catch (final RuntimeException | StackOverflowError e) {
+            PlanNH.LOG.error("Auto-layout failed; node positions left unchanged", e);
+            return;
+        }
         if (positions.isEmpty()) return;
 
         // Anchor the new layout's top-left where the chart's top-left used to be.

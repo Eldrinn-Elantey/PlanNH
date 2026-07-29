@@ -57,8 +57,14 @@ public class ClientProxy extends CommonProxy {
             .register(this);
 
         // ELK's first layout pays for its class loading and metadata registration; spend it
-        // during init so the first Auto-Layout click doesn't freeze the game.
-        AutoLayout.warmup();
+        // during init so the first Auto-Layout click doesn't freeze the game. AutoLayout's static
+        // block runs on this call, so a mis-shaded ELK fails here as a LinkageError - which must
+        // cost the mod its layout button, not its startup.
+        try {
+            AutoLayout.warmup();
+        } catch (final RuntimeException | LinkageError e) {
+            PlanNH.LOG.error("ELK warm-up failed; Auto-Layout will be unavailable", e);
+        }
     }
 
     @SubscribeEvent
