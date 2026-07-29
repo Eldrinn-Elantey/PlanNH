@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.ojalgo.netio.BasicLogger;
 import org.ojalgo.optimisation.Expression;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
@@ -346,7 +347,7 @@ public final class AutoBalancer {
                         .input() ? SRC_WEIGHT : SNK_WEIGHT);
             }
         }
-        final Optimisation.Result result = h.model.minimise();
+        final Optimisation.Result result = minimise(h.model);
         if (!isUsable(result)) return null;
         return StageSolve.from(ctx, h, result.getValue());
     }
@@ -379,7 +380,7 @@ public final class AutoBalancer {
                 ext.weight(1e-9);
             }
             addNoGoodCuts(h, cuts);
-            final Optimisation.Result result = h.model.minimise();
+            final Optimisation.Result result = minimise(h.model);
             if (!isUsable(result)) return null;
             if (pressesCap(h, bigM)) {
                 bigM *= 10;
@@ -406,7 +407,7 @@ public final class AutoBalancer {
                 h.extVars[p].upper(0);
             }
         }
-        final Optimisation.Result result = h.model.minimise();
+        final Optimisation.Result result = minimise(h.model);
         if (!isUsable(result)) return null;
         return StageSolve.from(ctx, h, result.getValue());
     }
@@ -429,7 +430,7 @@ public final class AutoBalancer {
                 ext.weight(1.0);
             }
             addNoGoodCuts(h, cuts);
-            final Optimisation.Result result = h.model.minimise();
+            final Optimisation.Result result = minimise(h.model);
             if (!isUsable(result)) return null;
             if (pressesCap(h, bigM)) {
                 bigM *= 10;
@@ -462,7 +463,7 @@ public final class AutoBalancer {
         for (final Variable f : h.flowVars) {
             f.weight(1.0);
         }
-        final Optimisation.Result result = h.model.minimise();
+        final Optimisation.Result result = minimise(h.model);
         if (!isUsable(result)) return null;
         return StageSolve.from(ctx, h, result.getValue());
     }
@@ -475,6 +476,25 @@ public final class AutoBalancer {
                 e.set(h.gateVars[g], cut.contains(g) ? -1.0 : 1.0);
             }
             e.lower(1.0 - cut.size());
+        }
+    }
+
+    /**
+     * ojAlgo's branch-and-bound prints every integrality drift it sees ("Obviously infeasible
+     * value ...") straight to the static {@link BasicLogger#ERROR} - roughly 150 lines per solve
+     * on a medium chart. {@code Optimisation.Options.validate} does not gate it: NodeKey passes
+     * that flag as a literal true. Big-M drift is expected here and already handled by deriving
+     * the gate support from flows rather than from the binaries, so the stream is silenced for
+     * the duration of our own solves and restored afterwards - a global assignment would also
+     * swallow the errors of any other mod using ojAlgo, which is not relocated in this jar.
+     */
+    private static Optimisation.Result minimise(final ExpressionsBasedModel model) {
+        final BasicLogger.Printer previous = BasicLogger.ERROR;
+        BasicLogger.ERROR = BasicLogger.NULL;
+        try {
+            return model.minimise();
+        } finally {
+            BasicLogger.ERROR = previous;
         }
     }
 
