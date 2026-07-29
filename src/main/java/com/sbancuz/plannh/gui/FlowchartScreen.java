@@ -43,8 +43,10 @@ import com.sbancuz.plannh.data.flowchart.SlotSet;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
 import com.sbancuz.plannh.gui.components.CycleButton;
+import com.sbancuz.plannh.nei.NEIPlanConfig;
 
 import codechicken.nei.LayoutManager;
+import codechicken.nei.NEIClientConfig;
 import codechicken.nei.guihook.GuiContainerManager;
 
 public class FlowchartScreen extends ModularScreen {
@@ -168,6 +170,22 @@ public class FlowchartScreen extends ModularScreen {
                         .coverChildren()
                         .childPadding(2)
                         .child(
+                            new ButtonWidget<>().overlay(
+                                IKey.str("\u21ba")
+                                    .scale(2f))
+                                .onMousePressed(_ -> {
+                                    canvas.undoGraph();
+                                    return true;
+                                }))
+                        .child(
+                            new ButtonWidget<>().overlay(
+                                IKey.str("\u21bb")
+                                    .scale(2f))
+                                .onMousePressed(_ -> {
+                                    canvas.redoGraph();
+                                    return true;
+                                }))
+                        .child(
                             new ButtonWidget<>().overlay(IKey.str("S2G"))
                                 .onMousePressed(_ -> {
                                     final Graph g = canvas.getGraph();
@@ -249,6 +267,21 @@ public class FlowchartScreen extends ModularScreen {
     public void onClose() {
         PlanAPI.save();
         super.onClose();
+    }
+
+    // Screen level, not canvas level: the panel only offers keys to the hovered widget, so the
+    // canvas never sees them while the cursor sits on the toolbar or a text field holds focus.
+    // isKeyHashDown reads the live LWJGL event, which is still the one being dispatched here.
+    @Override
+    public boolean onKeyPressed(final char typedChar, final int keyCode) {
+        final boolean undo = NEIClientConfig.isKeyHashDown(NEIPlanConfig.ConfigUndoKey.KEY);
+        if (undo || NEIClientConfig.isKeyHashDown(NEIPlanConfig.ConfigRedoKey.KEY)
+            || NEIClientConfig.isKeyHashDown(NEIPlanConfig.ConfigRedoAltKey.KEY)) {
+            if (undo) canvas.undoGraph();
+            else canvas.redoGraph();
+            return true;
+        }
+        return super.onKeyPressed(typedChar, keyCode);
     }
 
     @Override
