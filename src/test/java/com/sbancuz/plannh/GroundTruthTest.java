@@ -16,7 +16,9 @@ import com.sbancuz.plannh.data.flowchart.AutoBalancer.External;
 import com.sbancuz.plannh.data.flowchart.AutoBalancer.PortRef;
 import com.sbancuz.plannh.data.flowchart.AutoBalancer.Result;
 import com.sbancuz.plannh.data.flowchart.AutoBalancer.Solution;
+import com.sbancuz.plannh.data.flowchart.Edge;
 import com.sbancuz.plannh.data.flowchart.Node;
+import com.sbancuz.plannh.data.flowchart.Port;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 import com.sbancuz.plannh.harness.GtnhFlowLoader.LoadedChart;
 import com.sbancuz.plannh.harness.GtnhFlowLoader.Pin;
@@ -277,14 +279,85 @@ class GroundTruthTest {
     }
 
     @Test
+    void staleEdgePortIndex_isDroppedRatherThanCrashing() {
+        // Saved edges keep their port indices; the port lists come back from the live recipe
+        // handler and can be shorter. The balance runs from draw(), so an out-of-range index has
+        // to be survivable - the ILP modes already skip these edges.
+        final LoadedChart chart = GtnhFlowLoader.load("mk1");
+        final Edge stale = chart.graph()
+            .getEdges()
+            .iterator()
+            .next();
+        stale.targetInputIndex = 99;
+
+        final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
+
+        assertTrue(result.isSuccess(), () -> "solve failed: " + result.failure());
+        assertPortsConserve("mk1 with a stale edge", chart, result.solution());
+    }
+
+    @Test
     void everySolutionValidatesIndependently() {
-        // Never trust solver status codes: AutoBalancer.solve validates every
-        // solution against its own port-conservation rows and rejects on residuals; a corpus
-        // chart coming back as failure here means either a solver bug or a validation bug.
+        // Conservation is recomputed here from the returned flows rather than asked of the
+        // solver: AutoBalancer validates its own solutions, so trusting isSuccess() would only
+        // re-assert the solver's opinion of itself.
         for (final String name : GtnhFlowLoader.CORPUS) {
             final LoadedChart chart = GtnhFlowLoader.load(name);
             final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
             assertTrue(result.isSuccess(), () -> name + " failed: " + result.failure());
+            assertPortsConserve(name, chart, result.solution());
+        }
+    }
+
+    /**
+     * Every port must balance: what the machine produces or consumes there equals the flows on
+     * its edges plus whatever external the solver attached to it.
+     */
+    private static void assertPortsConserve(final String name, final LoadedChart chart, final Solution s) {
+        final Map<PortRef, Double> externals = new HashMap<>();
+        for (final External e : List.of(s.gatedSources(), s.gatedSinks(), s.terminalInputs(), s.terminalOutputs())
+            .stream()
+            .flatMap(List::stream)
+            .toList()) {
+            externals.merge(e.port(), e.ratePerSecond(), Double::sum);
+        }
+
+        for (final Node node : chart.machines()) {
+            final double extent = s.extentsPerSecond()
+                .getOrDefault(node.id, 0.0);
+            for (int side = 0; side < 2; side++) {
+                final boolean input = side == 0;
+                final List<Port<?>> ports = input ? node.inputs : node.outputs;
+                for (int p = 0; p < ports.size(); p++) {
+                    final int i = p;
+                    final double machineRate = extent * TestIngredients.quantityOf(ports.get(i));
+                    double edges = 0;
+                    for (final Edge edge : chart.graph()
+                        .getEdges()) {
+                        final boolean hit = input ? edge.targetNodeId.equals(node.id) && edge.targetInputIndex == i
+                            : edge.sourceNodeId.equals(node.id) && edge.sourceOutputIndex == i;
+                        if (hit) {
+                            edges += s.edgeFlowsPerSecond()
+                                .getOrDefault(edge.id, 0.0);
+                        }
+                    }
+                    final double edgeRate = edges;
+                    final double external = externals.getOrDefault(new PortRef(node.id, i, input), 0.0);
+                    final double residual = machineRate - edgeRate - external;
+                    assertTrue(
+                        Math.abs(residual) <= 1e-6 * Math.max(1.0, machineRate),
+                        () -> name + ": "
+                            + node.machineName
+                            + (input ? " input " : " output ")
+                            + i
+                            + " does not conserve - machine "
+                            + machineRate
+                            + ", edges "
+                            + edgeRate
+                            + ", external "
+                            + external);
+                }
+            }
         }
     }
 

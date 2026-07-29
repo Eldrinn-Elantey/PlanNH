@@ -527,6 +527,10 @@ public final class AutoBalancer {
         double qty(final int portIndex, final boolean input) {
             return input ? inQty[portIndex] : outQty[portIndex];
         }
+
+        boolean hasPort(final int portIndex, final boolean input) {
+            return portIndex >= 0 && portIndex < (input ? inQty.length : outQty.length);
+        }
     }
 
     private static final class Ctx {
@@ -556,6 +560,16 @@ public final class AutoBalancer {
                 final Integer src = machineIndex.get(edge.sourceNodeId);
                 final Integer dst = machineIndex.get(edge.targetNodeId);
                 if (src == null || dst == null) continue;
+                // Edges keep the port indices they were saved with, while port lists are rebuilt
+                // from the live recipe handler and can shrink (a settings change, or a recipe that
+                // lost an output between modpack versions). Drop the dangling edge rather than
+                // indexing past the node's ports.
+                if (!machines.get(src)
+                    .hasPort(edge.sourceOutputIndex, false)
+                    || !machines.get(dst)
+                        .hasPort(edge.targetInputIndex, true)) {
+                    continue;
+                }
                 final int srcPort = port(src, edge.sourceOutputIndex, false);
                 final int dstPort = port(dst, edge.targetInputIndex, true);
                 final int e = edges.size();
