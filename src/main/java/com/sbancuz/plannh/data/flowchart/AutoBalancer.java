@@ -66,8 +66,14 @@ public final class AutoBalancer {
      * minimal support. Big-M count minimization gives branch-and-bound no usable root bound, so
      * on large charts ojAlgo cannot prove optimality in any budget - the filter's answer is used
      * and marked uncertified instead of burning the full stage budget.
+     *
+     * <p>
+     * The number is small because the search is all-or-nothing: across the corpus every proof
+     * that lands does so within 150ms, and the charts that time out still time out at 5s. Paying
+     * more only lengthens the freeze - 5s cost palladium_line 14.0s per solve against 1.2s here,
+     * for identical gate counts, external quantities and machine counts.
      */
-    private static final long MILP_CERT_BUDGET_MILLIS = 5_000;
+    private static final long MILP_CERT_BUDGET_MILLIS = 500;
     /** Flows below this count as zero when deriving gate support. */
     private static final double ZERO = 1e-6;
     /** A machine "runs" if its crafts/s exceeds this. */
