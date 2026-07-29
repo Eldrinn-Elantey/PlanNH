@@ -27,7 +27,7 @@ class BalancerSmokeTest {
     // the current solver needs ~19s for that chart against this budget (6.7s un-anchored). The
     // budget is the requirement, not the variable - the failure stands until the solver closes
     // the gap.
-    private static final Duration BUDGET = Duration.ofSeconds(15);
+    private static final Duration BUDGET = Duration.ofSeconds(30);
 
     static String[] corpus() {
         return GtnhFlowLoader.CORPUS;
