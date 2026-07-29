@@ -56,7 +56,8 @@ public class ClientProxy extends CommonProxy {
             .bus()
             .register(this);
 
-        Minecraft.getMinecraft().func_152344_a(AutoLayout::warmup);
+        Minecraft.getMinecraft()
+            .func_152344_a(AutoLayout::warmup);
     }
 
     @SubscribeEvent
