@@ -81,6 +81,8 @@ public final class AutoBalancer {
     private static final double USE_EPS_DETECT = 1e-7;
     /** Fallback pass-2 floor (crafts/s) when no machine ran at all. */
     private static final double USE_EPS = 1e-4;
+    /** Stage-0 extent floor, as a fraction of the largest pinned extent. */
+    private static final double STAGE_ZERO_FLOOR = 1e-5;
     /** Relative slack on the stage-2 quantity cap in stage 3. */
     private static final double QTY_EPS = 1e-7;
     /** Relative residual tolerance for independent solution validation. */
@@ -145,27 +147,14 @@ public final class AutoBalancer {
             return Result.fail(NO_PIN);
         }
 
-        // Pass 1: floor-free.
-        Attempt attempt = runStages(ctx, null);
+        // Stage 0 is a constraint of the model, not a retry: a chart whose machines cannot all run
+        // is reported as unbalanceable rather than answered with a chart of idle machines.
+        final double[] floors = ctx.stageZeroFloors();
+        final Attempt attempt = runStages(ctx, floors);
         if (attempt.failure != null) {
             return Result.fail(attempt.failure);
         }
-
-        // Stage 0, pass 2: if machines idle, retry with scale-relative floors; keep the honest
-        // pass-1 result if the floored model fails.
-        boolean floorsUsed = false;
-        final double[] floors = ctx.floorsFrom(attempt.extents);
-        if (floors != null) {
-            final Attempt floored = runStages(ctx, floors);
-            if (floored.failure == null) {
-                attempt = floored;
-                floorsUsed = true;
-            } else {
-                // Pass 1 stands, but it leaves machines at zero - which reads on screen exactly
-                // like a chart that was never balanced. Say so instead of shipping the silence.
-                attempt = attempt.plusNote(ctx.idleCount(attempt.extents) + " machines are idle: " + floored.failure);
-            }
-        }
+        final boolean floorsUsed = floors != null;
 
         final String residualError = ctx.validate(attempt);
         if (residualError != null) {
@@ -187,7 +176,7 @@ public final class AutoBalancer {
 
         final Attempt base = runStages(ctx, null);
         if (base.failure != null) return List.of();
-        final double[] floors = ctx.floorsFrom(base.extents);
+        final double[] floors = ctx.stageZeroFloors();
         final Attempt attempt = floors == null ? base : orElse(runStages(ctx, floors), base);
 
         final List<Set<PortRef>> supports = new ArrayList<>();
@@ -234,15 +223,18 @@ public final class AutoBalancer {
         // Stage 1 runs twice: an LP deletion filter that always produces a minimal support fast,
         // then a short exact-MILP slice that certifies (or beats) it when the chart is small
         // enough for branch-and-bound. Large charts keep the filter answer, uncertified.
-        final Set<Integer> filterSupport = deletionFilter(ctx, floors);
-        if (filterSupport == null) {
+        final StageSolve filter = deletionFilter(ctx, floors);
+        if (filter == null) {
             return Attempt.failed("stage 1 (gate count) found no feasible support");
         }
+        final Set<Integer> filterSupport = filter.support;
         Set<Integer> s1Support = filterSupport;
+        StageSolve s1Witness = filter;
         boolean certified = false;
         final StageSolve milp = solveStage1(ctx, floors, List.of(), ctx.weightedCost(filterSupport));
         if (milp != null && ctx.weightedCost(milp.support) <= ctx.weightedCost(filterSupport) + 0.5) {
             s1Support = milp.support;
+            s1Witness = milp;
             certified = milp.provenOptimal;
         }
         final List<String> notes = certified ? List.of()
@@ -251,7 +243,7 @@ public final class AutoBalancer {
         final double weightedCap = ctx.weightedCost(s1Support);
 
         final StageSolve s2 = certified ? solveStage2Cut(ctx, floors, weightedCap, List.of())
-            : solveStage2Fixed(ctx, floors, s1Support);
+            : solveStage2Fixed(ctx, floors, ctx.carryingGates(s1Witness.externals, s1Support));
         if (s2 == null) {
             return Attempt.failed("stage 2 (external quantity) found no solution within budget");
         }
@@ -265,7 +257,11 @@ public final class AutoBalancer {
         StageSolve best = null;
         Set<Integer> bestSupport = null;
         for (final Set<Integer> support : candidates) {
-            final StageSolve s3 = solveStage3(ctx, floors, support, s2.externalQuantity);
+            final StageSolve s3 = solveStage3(
+                ctx,
+                floors,
+                ctx.carryingGates(s2.externals, support),
+                s2.externalQuantity);
             if (s3 != null && (best == null || s3.internalFlow < best.internalFlow - ZERO)) {
                 best = s3;
                 bestSupport = support;
@@ -302,9 +298,10 @@ public final class AutoBalancer {
      * while feasibility holds. The result is a MINIMAL support - no proper subset is feasible -
      * in a handful of fast LP solves and with no big-M anywhere.
      */
-    private static Set<Integer> deletionFilter(final Ctx ctx, final double[] floors) {
+    private static StageSolve deletionFilter(final Ctx ctx, final double[] floors) {
         final StageSolve lp0 = solveExternalsLp(ctx, floors, null);
         if (lp0 == null) return null;
+        StageSolve best = lp0;
         Set<Integer> support = lp0.support;
 
         final double[] gateFlow = new double[ctx.gates.size()];
@@ -326,9 +323,10 @@ public final class AutoBalancer {
             final StageSolve solved = solveExternalsLp(ctx, floors, trial);
             if (solved != null) {
                 support = solved.support;
+                best = solved;
             }
         }
-        return support;
+        return best;
     }
 
     /**
@@ -398,10 +396,10 @@ public final class AutoBalancer {
     }
 
     /** Stage 2 on the uncertified path: fixed support, plain LP, minimize external quantity. */
-    private static StageSolve solveStage2Fixed(final Ctx ctx, final double[] floors, final Set<Integer> support) {
+    private static StageSolve solveStage2Fixed(final Ctx ctx, final double[] floors, final Set<Integer> open) {
         final Handles h = ctx.buildModel(DEFAULT_BIG_M, false, floors);
         for (int p = 0; p < ctx.connectedPorts.size(); p++) {
-            if (support.contains(ctx.portGate[p])) {
+            if (open.contains(ctx.portGate[p])) {
                 h.extVars[p].weight(1.0);
             } else {
                 h.extVars[p].upper(0);
@@ -446,12 +444,12 @@ public final class AutoBalancer {
      * the quantity cap, ports of closed gates are hard zero), minimize total internal flow. Also
      * the zero-gate fast path (empty support, zero cap).
      */
-    private static StageSolve solveStage3(final Ctx ctx, final double[] floors, final Set<Integer> support,
+    private static StageSolve solveStage3(final Ctx ctx, final double[] floors, final Set<Integer> open,
         final double qtyCap) {
         final Handles h = ctx.buildModel(DEFAULT_BIG_M, false, floors);
-        final Expression qty = support.isEmpty() ? null : h.model.addExpression("qty_cap");
+        final Expression qty = open.isEmpty() ? null : h.model.addExpression("qty_cap");
         for (int p = 0; p < ctx.connectedPorts.size(); p++) {
-            if (support.contains(ctx.portGate[p])) {
+            if (open.contains(ctx.portGate[p])) {
                 qty.set(h.extVars[p], 1.0);
             } else {
                 h.extVars[p].upper(0);
@@ -766,6 +764,53 @@ public final class AutoBalancer {
          * uniform extent floor 1000x below the smallest observed running rate, so the floor can
          * never bind above a plausible natural rate.
          */
+        /**
+         * Stage 0 as a constraint rather than a retry: every machine wired to a pin has to run.
+         * The floor is a millionth of the largest pinned extent - small enough that it never
+         * competes with a machine's natural rate (which would conjure externals to absorb the
+         * excess), large enough that the solver cannot park a machine at zero and call the chart
+         * balanced.
+         *
+         * <p>
+         * Machines in a component with no pin are exempt: nothing anchors their scale, so forcing
+         * them to run would invent quantities the user never asked for. Returns null when nothing
+         * is pinned at all.
+         */
+        double[] stageZeroFloors() {
+            final int[] root = new int[machines.size()];
+            for (int m = 0; m < root.length; m++) {
+                root[m] = m;
+            }
+            for (final EdgeData e : edges) {
+                union(
+                    root,
+                    connectedPorts.get(e.srcPort())
+                        .machine(),
+                    connectedPorts.get(e.dstPort())
+                        .machine());
+            }
+
+            final Set<Integer> pinnedComponents = new HashSet<>();
+            double scale = 0;
+            for (int m = 0; m < machines.size(); m++) {
+                final Double pin = machines.get(m).pinnedExtent;
+                if (pin != null) {
+                    pinnedComponents.add(find(root, m));
+                    scale = Math.max(scale, pin);
+                }
+            }
+            if (pinnedComponents.isEmpty() || scale <= 0) return null;
+
+            final double floor = scale * STAGE_ZERO_FLOOR;
+            final double[] floors = new double[machines.size()];
+            for (int m = 0; m < machines.size(); m++) {
+                if (machines.get(m).pinnedExtent == null && pinnedComponents.contains(find(root, m))) {
+                    floors[m] = floor;
+                }
+            }
+            return floors;
+        }
+
         /** Machines the solution leaves at zero, ignoring any the user pinned there. */
         int idleCount(final double[] extents) {
             int idle = 0;
@@ -816,6 +861,20 @@ public final class AutoBalancer {
                 max = Math.max(max, Math.abs(v));
             }
             return ZERO * Math.max(max, Double.MIN_NORMAL);
+        }
+
+        /**
+         * Every gate the given solution puts any flow through, however little - the set that must
+         * stay open for that solution to remain feasible. {@link #gateSupport} is the reporting
+         * view of the same data and deliberately ignores negligible flows.
+         */
+        Set<Integer> carryingGates(final double[] externals, final Set<Integer> fallback) {
+            if (externals == null) return fallback;
+            final Set<Integer> carrying = new HashSet<>(fallback);
+            for (int p = 0; p < externals.length; p++) {
+                if (externals[p] > 0) carrying.add(portGate[p]);
+            }
+            return carrying;
         }
 
         /** The gate support (gate indices) carried by the given per-port external flows. */

@@ -279,6 +279,48 @@ class GroundTruthTest {
     }
 
     @Test
+    void everyMachineWiredToAPinRuns() {
+        // Stage 0 is a constraint, not a preference: a chart whose machines cannot all run is
+        // reported as unbalanceable. A solved chart with a machine parked at zero is the failure
+        // this guards - it reads on screen as a working plan with a dead machine in it.
+        for (final String name : GtnhFlowLoader.CORPUS) {
+            final LoadedChart chart = GtnhFlowLoader.load(name);
+            final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
+            assertTrue(result.isSuccess(), () -> name + " failed: " + result.failure());
+            assertAllMachinesRun(chart, result.solution());
+        }
+    }
+
+    @Test
+    void aMachineDisconnectedFromThePinIsExempt() {
+        // The exemption to stage 0: nothing anchors the scale of a component with no pin in it,
+        // so forcing it to run would invent quantities. It must not drag the rest down with it.
+        final LoadedChart chart = GtnhFlowLoader.load("mk1_tiberium");
+        final Node stranded = chart.machine(2);
+        chart.graph()
+            .getEdges()
+            .stream()
+            .filter(e -> e.sourceNodeId.equals(stranded.id) || e.targetNodeId.equals(stranded.id))
+            .map(e -> e.id)
+            .toList()
+            .forEach(
+                id -> chart.graph()
+                    .removeEdge(id));
+
+        final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
+
+        assertTrue(result.isSuccess(), () -> "solve failed: " + result.failure());
+        for (final Node machine : chart.machines()) {
+            if (machine.id.equals(stranded.id)) continue;
+            assertTrue(
+                result.solution()
+                    .extentsPerSecond()
+                    .get(machine.id) > 1e-9,
+                machine.machineName + " must still run");
+        }
+    }
+
+    @Test
     void solutionsScaleWithTheirPins() {
         // The model is homogeneous: scaling every pin by f must scale the whole solution by f and
         // leave the structure alone. Absolute tolerances broke this - a chart pinned at a tenth of
