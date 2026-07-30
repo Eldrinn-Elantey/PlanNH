@@ -82,11 +82,12 @@ public final class AutoBalancer {
     private static final double USE_EPS_DETECT = 1e-7;
     /** Fallback pass-2 floor (crafts/s) when no machine ran at all. */
     private static final double USE_EPS = 1e-4;
-    /** Stage-0 extent floor, as a fraction of the largest pinned extent. */
-    private static final double STAGE_ZERO_FLOOR = 1e-5;
     /** Relative slack on the stage-2 quantity cap in stage 3. */
     private static final double QTY_EPS = 1e-7;
-    /** Relative residual tolerance for independent solution validation. */
+    /**
+     * Residual tolerance for the independent conservation check, scaled by each row's largest
+     * coefficient so it means the same thing on a row measured in items and one in millibuckets.
+     */
     private static final double VALIDATE_TOL = 1e-6;
     private static final double SNK_WEIGHT = 1024.0;
     private static final double SRC_WEIGHT = 1025.0;
@@ -148,14 +149,29 @@ public final class AutoBalancer {
             return Result.fail(NO_PIN);
         }
 
-        // Stage 0 is a constraint of the model, not a retry: a chart whose machines cannot all run
-        // is reported as unbalanceable rather than answered with a chart of idle machines.
-        final double[] floors = ctx.stageZeroFloors();
-        final Attempt attempt = runStages(ctx, floors);
+        // Pass 1 is floor-free. A floor picked before a solution exists is not scale-free: set it
+        // above a machine's natural rate and it forces excess through that machine, which then
+        // needs an external to absorb it. It also drags conservation rows down to floor magnitude,
+        // where a solver's arithmetic is a large fraction of the row.
+        Attempt attempt = runStages(ctx, null);
         if (attempt.failure != null) {
             return Result.fail(attempt.failure);
         }
-        final boolean floorsUsed = floors != null;
+
+        // Stage 0: every machine wired to a pin runs, with the floor taken from pass 1's own
+        // smallest running rate so it cannot bind above a rate this chart already achieves. Not
+        // negotiable - a chart that cannot run its machines is reported as unbalanceable rather
+        // than answered with dead machines in it.
+        boolean floorsUsed = false;
+        final double[] floors = ctx.stageZeroFloors(attempt.extents);
+        if (floors != null) {
+            final Attempt floored = runStages(ctx, floors);
+            if (floored.failure != null) {
+                return Result.fail(ctx.idleCount(attempt.extents) + " machines cannot run: " + floored.failure);
+            }
+            attempt = floored;
+            floorsUsed = true;
+        }
 
         final String residualError = ctx.validate(attempt);
         if (residualError != null) {
@@ -177,7 +193,7 @@ public final class AutoBalancer {
 
         final Attempt base = runStages(ctx, null);
         if (base.failure != null) return List.of();
-        final double[] floors = ctx.stageZeroFloors();
+        final double[] floors = ctx.stageZeroFloors(base.extents);
         final Attempt attempt = floors == null ? base : orElse(runStages(ctx, floors), base);
 
         final List<Set<PortRef>> supports = new ArrayList<>();
@@ -241,7 +257,10 @@ public final class AutoBalancer {
         final List<String> notes = certified ? List.of()
             : List.of(
                 "gate count " + s1Support.size() + " is minimal but not certified optimal (exact search over budget)");
-        final double weightedCap = ctx.weightedCost(s1Support);
+        // The cap must cover what stage 1 actually used, not what its support reports: a gate
+        // carrying flow too small to register still costs its weight, and capping below it leaves
+        // stage 2 infeasible on a chart stage 1 has just solved.
+        final double weightedCap = ctx.weightedCost(ctx.carryingGates(s1Witness.externals, s1Support));
 
         final StageSolve s2 = certified ? solveStage2Cut(ctx, floors, weightedCap, List.of())
             : solveStage2Fixed(ctx, floors, ctx.carryingGates(s1Witness.externals, s1Support));
@@ -775,7 +794,7 @@ public final class AutoBalancer {
          * them to run would invent quantities the user never asked for. Returns null when nothing
          * is pinned at all.
          */
-        double[] stageZeroFloors() {
+        double[] stageZeroFloors(final double[] extents) {
             final int[] root = new int[machines.size()];
             for (int m = 0; m < root.length; m++) {
                 root[m] = m;
@@ -790,17 +809,21 @@ public final class AutoBalancer {
             }
 
             final Set<Integer> pinnedComponents = new HashSet<>();
-            double scale = 0;
             for (int m = 0; m < machines.size(); m++) {
-                final Double pin = machines.get(m).pinnedExtent;
-                if (pin != null) {
-                    pinnedComponents.add(find(root, m));
-                    scale = Math.max(scale, pin);
-                }
+                if (machines.get(m).pinnedExtent != null) pinnedComponents.add(find(root, m));
             }
-            if (pinnedComponents.isEmpty() || scale <= 0) return null;
+            if (pinnedComponents.isEmpty()) return null;
 
-            final double floor = scale * STAGE_ZERO_FLOOR;
+            boolean anyIdle = false;
+            double minRunning = Double.MAX_VALUE;
+            for (int m = 0; m < machines.size(); m++) {
+                if (machines.get(m).pinnedExtent != null || !pinnedComponents.contains(find(root, m))) continue;
+                if (extents[m] <= USE_EPS_DETECT) anyIdle = true;
+                else minRunning = Math.min(minRunning, extents[m]);
+            }
+            if (!anyIdle) return null;
+
+            final double floor = (minRunning == Double.MAX_VALUE ? USE_EPS : minRunning) * 1e-3;
             final double[] floors = new double[machines.size()];
             for (int m = 0; m < machines.size(); m++) {
                 if (machines.get(m).pinnedExtent == null && pinnedComponents.contains(find(root, m))) {
@@ -912,7 +935,12 @@ public final class AutoBalancer {
                 }
                 final double rhs = attempt.extents[port.machine()] * port.qtyPerCraft();
                 final double residual = flows + attempt.externals[p] - rhs;
-                if (Math.abs(residual) > VALIDATE_TOL * Math.max(1.0, Math.abs(rhs))) {
+                // Scaled by the row's largest coefficient, which is what makes the tolerance mean
+                // the same thing on a row measured in single items and one measured in thousands of
+                // millibuckets. Scaling by the right-hand side instead makes the check arbitrarily
+                // strict on any port whose own throughput is small.
+                final double scale = Math.max(1.0, port.qtyPerCraft());
+                if (Math.abs(residual) / scale > VALIDATE_TOL) {
                     final MachineData m = machines.get(port.machine());
                     return "port " + (port.input() ? "in" : "out")
                         + "["
