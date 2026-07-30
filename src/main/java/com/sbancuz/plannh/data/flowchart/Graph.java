@@ -30,7 +30,7 @@ public class Graph {
     private boolean snapToGrid;
 
     @Getter
-    private Balancer.BalanceMode balanceMode = Balancer.BalanceMode.OUTPUT;
+    private Balancer.BalanceMode balanceMode = Balancer.BalanceMode.AUTO;
     @Getter
     private boolean opsMode;
 

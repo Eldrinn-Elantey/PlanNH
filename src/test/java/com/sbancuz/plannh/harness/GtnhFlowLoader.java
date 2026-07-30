@@ -54,7 +54,8 @@ public final class GtnhFlowLoader {
 
     /** The bundled corpus, one entry per fixture under {@code /gtnh-flow/}. */
     public static final String[] CORPUS = { "mk1", "mk1_tiberium", "loopGraph", "light_fuel",
-        "light_fuel_hydrogen_loop", "230_platline", "palladium_line", "nanocircuits" };
+        "light_fuel_hydrogen_loop", "230_platline", "palladium_line", "nanocircuits", "cetane", "jet_fuel",
+        "microsheep", "palladium", "twoslack" };
 
     /**
      * Machine profiles are normally registered during mod init; headless tests need the default

@@ -279,6 +279,71 @@ class GroundTruthTest {
     }
 
     @Test
+    void mk1_reproducesTheHandDerivedRatios() {
+        // Every number here is derived from mk1.yaml by hand at its target of 10 naquadah fuel
+        // mk1/s, and matches the worked example in the design notes. The fusion reactor makes 100
+        // per 0.25s craft, so 10/s is 0.1 crafts/s; that draws 30x0.1 = 3/s heavy and 65x0.1 =
+        // 6.5/s light. The tower makes 10 light per 1s craft, so it runs at 0.65 crafts/s, which
+        // also makes 5x0.65 = 3.25/s heavy - 0.25/s more than the reactor can take.
+        final LoadedChart chart = GtnhFlowLoader.load("mk1");
+        final Solution s = solve(chart);
+
+        final Node fusion = chart.machine(0);
+        final Node tower = chart.machine(1);
+
+        assertEquals(
+            0.1,
+            s.extentsPerSecond()
+                .get(fusion.id),
+            EPS,
+            "fusion runs at 0.1 crafts/s");
+        assertEquals(
+            0.65,
+            s.extentsPerSecond()
+                .get(tower.id),
+            EPS,
+            "tower runs at 0.65 crafts/s");
+
+        assertEquals(13.0, terminalRate(chart, s.terminalInputs(), "naquadah solution"), EPS, "13/s in");
+        assertEquals(10.0, terminalRate(chart, s.terminalOutputs(), "naquadah fuel mk1"), EPS, "10/s out");
+        assertEquals(1.3, terminalRate(chart, s.terminalOutputs(), "naquadah asphalt"), EPS);
+        assertEquals(39.0, terminalRate(chart, s.terminalOutputs(), "naquadah gas"), EPS);
+
+        final double heavyToFusion = edgeRateInto(chart, s, fusion, "heavy naquadah fuel");
+        final double lightToFusion = edgeRateInto(chart, s, fusion, "light naquadah fuel");
+        assertEquals(3.0, heavyToFusion, EPS, "3/s heavy reaches the reactor");
+        assertEquals(6.5, lightToFusion, EPS, "6.5/s light reaches the reactor");
+
+        assertEquals(
+            1,
+            s.gatedSinks()
+                .size(),
+            "the excess heavy is discarded, once");
+        final double heavyDiscarded = s.gatedSinks()
+            .get(0)
+            .ratePerSecond();
+        assertEquals(0.25, heavyDiscarded, EPS, "0.25/s heavy discarded");
+        // The ratio a human reads off the chart to check it by eye.
+        assertEquals(12.0, heavyToFusion / heavyDiscarded, 1e-6, "heavy consumed to heavy discarded is exactly 12:1");
+        assertEquals(3.25, heavyToFusion + heavyDiscarded, EPS, "and together they are everything the tower made");
+    }
+
+    /** Summed flow on edges delivering the named ingredient into a machine's inputs. */
+    private static double edgeRateInto(final LoadedChart chart, final Solution s, final Node machine,
+        final String ingredient) {
+        double rate = 0;
+        for (final Edge edge : chart.graph()
+            .getEdges()) {
+            if (!edge.targetNodeId.equals(machine.id)) continue;
+            if (!TestIngredients.nameOf(machine.inputs.get(edge.targetInputIndex))
+                .equals(ingredient)) continue;
+            rate += s.edgeFlowsPerSecond()
+                .getOrDefault(edge.id, 0.0);
+        }
+        return rate;
+    }
+
+    @Test
     void everyMachineWiredToAPinRuns() {
         // Stage 0 is a constraint, not a preference: a chart whose machines cannot all run is
         // reported as unbalanceable. A solved chart with a machine parked at zero is the failure
