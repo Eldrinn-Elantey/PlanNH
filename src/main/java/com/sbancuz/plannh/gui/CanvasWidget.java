@@ -692,6 +692,8 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
 
         // Close context menu on any click
         menuOpen = false;
+        // Same for the target editor; if its field was focused, the unfocus commit runs first.
+        closeTargetEditor();
 
         if (mouseButton == 0) {
             final int cmx = absMx - getArea().x;
@@ -761,6 +763,57 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
     private void openContextMenu() {
         contextMenu2.pos(getContext().getAbsMouseX(), getContext().getAbsMouseY());
         menuOpen = true;
+    }
+
+    // ── Target-rate editor ──
+    // The node config panel is immediate-mode drawing, so it cannot host a text widget; the
+    // editor is a screen-level menu (same pattern as the context menu) that this widget opens
+    // and positions, with the value bridged through the two methods below.
+
+    @Nullable
+    private Menu<?> targetEditorMenu;
+    @Nullable
+    private Node targetEditNode;
+    private int targetEditOutput = -1;
+
+    public void setTargetEditorMenu(final Menu<?> menu) {
+        targetEditorMenu = menu;
+    }
+
+    public boolean isTargetEditorOpen() {
+        return targetEditNode != null;
+    }
+
+    public void openTargetEditor(final Node node, final int outputIndex) {
+        targetEditNode = node;
+        targetEditOutput = outputIndex;
+        if (targetEditorMenu != null) {
+            targetEditorMenu.pos(getContext().getAbsMouseX(), getContext().getAbsMouseY());
+        }
+    }
+
+    public void closeTargetEditor() {
+        targetEditNode = null;
+        targetEditOutput = -1;
+    }
+
+    public double editedTargetRate() {
+        if (targetEditNode == null) return 0;
+        return targetEditNode.targetOutputRates.getOrDefault(targetEditOutput, 0.0);
+    }
+
+    /** Commits the typed rate as one undo step and closes the editor; 0 clears the pin. */
+    public void setEditedTargetRate(final double rate) {
+        final Node node = targetEditNode;
+        final int out = targetEditOutput;
+        if (node == null) return;
+        PlanAPI.recordEdit(graph, () -> {
+            if (rate <= 0) node.targetOutputRates.remove(out);
+            else node.targetOutputRates.put(out, rate);
+        });
+        graph.markDirty();
+        PlanAPI.save();
+        closeTargetEditor();
     }
 
     @Override

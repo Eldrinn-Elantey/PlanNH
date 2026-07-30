@@ -9,6 +9,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
 
@@ -109,6 +110,8 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
     private static final int SETTING_BTN_W = 22;
     private static final int SETTING_INC_X = SETTING_DEC_X + SETTING_BTN_W;
     private static final int EXTRACTOR_BTN_W = 100;
+    /** Usable width of a target row: the config panel minus its insets and a right pad. */
+    private static final int TARGET_ROW_W = CONFIG_PANEL_W - 2 * CONFIG_PANEL_INSET - 8;
     private static final int HOLD_REPEAT_DELAY_MS = 350;
     private static final int HOLD_REPEAT_INTERVAL_MS = 50;
 
@@ -695,20 +698,28 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
             y = drawSetting(x, y, def, c);
         }
 
-        // One row per output: pin the rate the chart should produce, 0 = unpinned. This is the
-        // AUTO-mode anchor a player actually thinks in - "10/s of this" - instead of working
-        // backwards to a machine count.
-        for (final int out : targetableOutputs()) {
-            final int idx = out;
+        // One row per output: pin the rate the chart should produce. This is the AUTO-mode anchor
+        // a player actually thinks in - "10/s of this" - instead of working backwards to a
+        // machine count. The row opens a text editor; rates are typed, not stepped.
+        final FontRenderer font = Minecraft.getMinecraft().fontRenderer;
+        for (final int idx : targetableOutputs()) {
             final double current = node.targetOutputRates.getOrDefault(idx, 0.0);
-            final String name = portDisplayName(node.outputs.get(idx));
-            final String label = "Tgt " + shorten(name)
-                + (current > 0 ? " " + GuiHelper.formatRate((float) current) + "/s" : " off");
-            y = drawConfigIntField(x, y, label, (int) Math.round(current), 0, 1_000_000, v -> {
-                if (v <= 0) node.targetOutputRates.remove(idx);
-                else node.targetOutputRates.put(idx, (double) v);
-                onConfigChanged();
-            });
+            final String value = current > 0 ? GuiHelper.formatRate((float) current) + "/s" : "off";
+            final int valueW = font.getStringWidth(value);
+            final String label = font
+                .trimStringToWidth("Tgt " + portDisplayName(node.outputs.get(idx)), TARGET_ROW_W - valueW - 6);
+            GuiDraw.drawText(label, x, y, 1.0f, PlannhColors.TEXT_LIGHT.getColor(), false);
+            GuiDraw.drawText(
+                value,
+                x + TARGET_ROW_W - valueW,
+                y,
+                1.0f,
+                current > 0 ? PlannhColors.SETTING_ON.getColor() : PlannhColors.TEXT_MUTED.getColor(),
+                false);
+            final int out = idx;
+            configZones
+                .add(new ClickZone(x, y, x + TARGET_ROW_W, y + CLICK_H, () -> canvas.openTargetEditor(node, out)));
+            y += LINE_H;
         }
 
         if (node.getAvailableExtractors()
@@ -807,11 +818,6 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
             }
         }
         return result;
-    }
-
-    /** Config-panel rows are ~28 chars wide; the rate suffix needs the tail. */
-    private static String shorten(final String name) {
-        return name.length() <= 12 ? name : name.substring(0, 11) + '…';
     }
 
     private int drawConfigIntField(final int x, final int y, final String label, final int value, final int min,

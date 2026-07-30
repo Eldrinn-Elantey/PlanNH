@@ -25,6 +25,7 @@ import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
 import com.cleanroommc.modularui.theme.WidgetThemeEntry;
 import com.cleanroommc.modularui.utils.Alignment;
 import com.cleanroommc.modularui.utils.Color;
+import com.cleanroommc.modularui.value.DoubleValue;
 import com.cleanroommc.modularui.widget.Widget;
 import com.cleanroommc.modularui.widget.sizer.Area;
 import com.cleanroommc.modularui.widget.sizer.Unit;
@@ -32,6 +33,7 @@ import com.cleanroommc.modularui.widgets.ButtonWidget;
 import com.cleanroommc.modularui.widgets.ListWidget;
 import com.cleanroommc.modularui.widgets.layout.Flow;
 import com.cleanroommc.modularui.widgets.menu.Menu;
+import com.cleanroommc.modularui.widgets.textfield.TextFieldWidget;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.api.PlanAPI;
 import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
@@ -122,6 +124,19 @@ public class FlowchartScreen extends ModularScreen {
                         .overlay(
                             IKey.str("Add Group")
                                 .color(Color.WHITE.main))));
+
+        // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
+        // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
+        final Menu<?> targetEditor = new Menu<>();
+        targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
+            .coverChildren()
+            .background()
+            .relativeToScreen()
+            .child(
+                new TextFieldWidget().numbersDouble(0, 1_000_000)
+                    .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
+                    .size(70, 14));
+        canvas.setTargetEditorMenu(targetEditor);
 
         final SlotSet set = PlanAPI.getSlotSet();
 
@@ -259,6 +274,7 @@ public class FlowchartScreen extends ModularScreen {
         panel.child(mainColumn);
         panel.child(new SummaryWidget(canvas));
         panel.child(contextMenu);
+        panel.child(targetEditor);
 
         return new FlowchartScreen(panel, graph, canvas);
     }
@@ -312,6 +328,19 @@ public class FlowchartScreen extends ModularScreen {
     // ── Slot bar helpers ──
 
     private static void shiftSlot(final CanvasWidget canvas, final int dir) {
+        // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
+        // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
+        final Menu<?> targetEditor = new Menu<>();
+        targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
+            .coverChildren()
+            .background()
+            .relativeToScreen()
+            .child(
+                new TextFieldWidget().numbersDouble(0, 1_000_000)
+                    .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
+                    .size(70, 14));
+        canvas.setTargetEditorMenu(targetEditor);
+
         final SlotSet set = PlanAPI.getSlotSet();
         if (set.slots.size() <= 1) return;
         set.activeSlot = (set.activeSlot + dir + set.slots.size()) % set.slots.size();
@@ -320,6 +349,19 @@ public class FlowchartScreen extends ModularScreen {
     }
 
     private static void addSlot(final CanvasWidget canvas) {
+        // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
+        // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
+        final Menu<?> targetEditor = new Menu<>();
+        targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
+            .coverChildren()
+            .background()
+            .relativeToScreen()
+            .child(
+                new TextFieldWidget().numbersDouble(0, 1_000_000)
+                    .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
+                    .size(70, 14));
+        canvas.setTargetEditorMenu(targetEditor);
+
         final SlotSet set = PlanAPI.getSlotSet();
         final int n = set.slots.size() + 1;
         final SlotSet.Slot slot = new SlotSet.Slot("Slot " + n, new Graph());
@@ -330,6 +372,19 @@ public class FlowchartScreen extends ModularScreen {
     }
 
     private static void deleteSlot(final CanvasWidget canvas) {
+        // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
+        // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
+        final Menu<?> targetEditor = new Menu<>();
+        targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
+            .coverChildren()
+            .background()
+            .relativeToScreen()
+            .child(
+                new TextFieldWidget().numbersDouble(0, 1_000_000)
+                    .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
+                    .size(70, 14));
+        canvas.setTargetEditorMenu(targetEditor);
+
         final SlotSet set = PlanAPI.getSlotSet();
         if (set.slots.size() <= 1) return;
         set.slots.remove(set.activeSlot);
