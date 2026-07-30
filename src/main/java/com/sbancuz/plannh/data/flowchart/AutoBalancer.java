@@ -262,8 +262,17 @@ public final class AutoBalancer {
         // stage 2 infeasible on a chart stage 1 has just solved.
         final double weightedCap = ctx.weightedCost(ctx.carryingGates(s1Witness.externals, s1Support));
 
-        final StageSolve s2 = certified ? solveStage2Cut(ctx, floors, weightedCap, List.of())
-            : solveStage2Fixed(ctx, floors, ctx.carryingGates(s1Witness.externals, s1Support));
+        final Set<Integer> s1Carrying = ctx.carryingGates(s1Witness.externals, s1Support);
+        StageSolve s2 = certified ? solveStage2Cut(ctx, floors, weightedCap, List.of())
+            : solveStage2Fixed(ctx, floors, s1Carrying);
+        if (s2 == null && certified) {
+            // The free search over minimal-count supports did not close. Holding the gates to the
+            // ones stage 1 used makes this an LP that stage 1's solution already satisfies, so it
+            // cannot be infeasible; the quantity it finds is never better than the free search
+            // would have found, and the stage-3 tie enumeration below is skipped accordingly.
+            s2 = solveStage2Fixed(ctx, floors, s1Carrying);
+            certified = false;
+        }
         if (s2 == null) {
             return Attempt.failed("stage 2 (external quantity) found no solution within budget");
         }
