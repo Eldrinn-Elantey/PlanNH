@@ -57,7 +57,7 @@ dependencies {
     annotationProcessor('org.projectlombok:lombok:1.18.46')
 
     // ILP solver
-    shadowImplementation('org.ojalgo:ojalgo:47.3.1')
+    shadowImplementation('org.ojalgo:ojalgo:57.1.0')
 
     // Opt-in GTNH pack recipes for the dev client: `./gradlew runClient -PgtnhRecipes`.
     // Loads the GTNH coremod (dreamcraft) so NEI shows the pack's recipe tweaks in dev.

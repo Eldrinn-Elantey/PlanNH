@@ -11,11 +11,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import org.ojalgo.netio.BasicLogger;
 import org.ojalgo.optimisation.Expression;
 import org.ojalgo.optimisation.ExpressionsBasedModel;
 import org.ojalgo.optimisation.Optimisation;
 import org.ojalgo.optimisation.Variable;
+import org.ojalgo.optimisation.integer.IntegerStrategy;
+import org.ojalgo.type.context.NumberContext;
 
 import com.sbancuz.plannh.data.MachineConfig;
 
@@ -487,13 +488,7 @@ public final class AutoBalancer {
      * swallow the errors of any other mod using ojAlgo, which is not relocated in this jar.
      */
     private static Optimisation.Result minimise(final ExpressionsBasedModel model) {
-        final BasicLogger.Printer previous = BasicLogger.ERROR;
-        BasicLogger.ERROR = BasicLogger.NULL;
-        try {
-            return model.minimise();
-        } finally {
-            BasicLogger.ERROR = previous;
-        }
+        return model.minimise();
     }
 
     private static boolean isUsable(final Optimisation.Result result) {
@@ -702,7 +697,11 @@ public final class AutoBalancer {
             final ExpressionsBasedModel model = new ExpressionsBasedModel();
             model.options.time_abort = STAGE_TIME_LIMIT_MILLIS;
             model.options.time_suffice = STAGE_TIME_LIMIT_MILLIS;
-            model.options.mip_gap = 1e-6;
+            model.options.integer(IntegerStrategy.DEFAULT.withGapTolerance(NumberContext.of(12, 8)));
+            // The conservation rows are what the whole answer rests on, so the solver is held to a
+            // tighter feasibility context than its default: the independent validation downstream
+            // rejects residuals this would otherwise leave behind.
+            model.options.feasibility = NumberContext.of(12, 10);
 
             final Variable[] extentVars = new Variable[machines.size()];
             for (int m = 0; m < machines.size(); m++) {
