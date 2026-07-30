@@ -680,21 +680,44 @@ public final class AutoBalancer {
         }
 
         /**
-         * Pins: explicit extents, then fixed machine counts. If nothing at all is pinned the
-         * model is homogeneous (any solution scales), so anchor deterministically on the machine
-         * with the largest configured count.
+         * Pins, strongest first: explicit extents, target output rates, fixed machine counts. A
+         * target beats a fixed count on the same machine because it names the thing the user
+         * actually wants - the rate - where the count is only a means to it.
          */
         private void applyPins(final Map<UUID, Double> extraExtentPins) {
             for (final MachineData m : machines) {
                 final Double extra = extraExtentPins.get(m.node.id);
+                final Double target = targetExtent(m);
                 if (extra != null) {
                     m.pinnedExtent = extra;
+                    anyPin = true;
+                } else if (target != null) {
+                    m.pinnedExtent = target;
                     anyPin = true;
                 } else if (m.node.isMachineCountFixed()) {
                     m.pinnedExtent = extentOf(m, m.node.machineConfig.getMachineCount());
                     anyPin = true;
                 }
             }
+        }
+
+        /**
+         * The extent implied by a node's target output rates: rate divided by per-craft quantity,
+         * largest target winning (parallel outputs share one extent, so only the tightest can be
+         * hit exactly). Targets on ports that no longer exist or produce nothing are skipped the
+         * same way stale edges are.
+         */
+        private static Double targetExtent(final MachineData m) {
+            Double extent = null;
+            for (final Map.Entry<Integer, Double> t : m.node.targetOutputRates.entrySet()) {
+                if (t.getValue() == null || t.getValue() <= 0) continue;
+                if (!m.hasPort(t.getKey(), false)) continue;
+                final double qty = m.qty(t.getKey(), false);
+                if (qty <= 0) continue;
+                final double e = t.getValue() / qty;
+                if (extent == null || e > extent) extent = e;
+            }
+            return extent;
         }
 
         private static double extentOf(final MachineData m, final int machineCount) {

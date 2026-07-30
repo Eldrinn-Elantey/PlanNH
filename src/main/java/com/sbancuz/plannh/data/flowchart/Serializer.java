@@ -212,6 +212,13 @@ public final class Serializer {
             if (node.isMachineCountFixed()) {
                 obj.addProperty("machineCountFixed", true);
             }
+            if (!node.targetOutputRates.isEmpty()) {
+                final JsonObject targets = new JsonObject();
+                for (final Map.Entry<Integer, Double> t : node.targetOutputRates.entrySet()) {
+                    targets.addProperty(String.valueOf(t.getKey()), t.getValue());
+                }
+                obj.add("targets", targets);
+            }
 
             obj.add("inputs", portListToJson(node.inputs));
             obj.add("outputs", portListToJson(node.outputs));
@@ -302,6 +309,21 @@ public final class Serializer {
             node.setMachineCountFixed(
                 obj.has("machineCountFixed") && obj.get("machineCountFixed")
                     .getAsBoolean());
+            // Read independently of every other key - conditional reads are how the
+            // default-profile settings were silently dropped on load.
+            if (obj.has("targets")) {
+                for (final Map.Entry<String, JsonElement> t : obj.getAsJsonObject("targets")
+                    .entrySet()) {
+                    try {
+                        node.targetOutputRates.put(
+                            Integer.parseInt(t.getKey()),
+                            t.getValue()
+                                .getAsDouble());
+                    } catch (final NumberFormatException ignored) {
+                        // A malformed key loses one target, not the chart.
+                    }
+                }
+            }
 
             if (obj.has("inputs")) {
                 applySavedPortChances(obj.getAsJsonArray("inputs"), node.inputs);

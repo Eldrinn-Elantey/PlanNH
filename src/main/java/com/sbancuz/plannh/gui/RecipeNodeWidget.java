@@ -500,7 +500,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         if (port.getType() == RecipePropertyAPI.ITEM) {
             final ItemStack stack = (ItemStack) port.getValue();
             final float total = effectiveTotal(nb, index, output, stack.stackSize);
-            String label = GuiHelper.formatRate(total / sec) + "/s " + stack.getDisplayName();
+            String label = GuiHelper.formatRate(total / sec) + "/s " + portDisplayName(port);
             if (output && port.getChance() < 0.999f) {
                 label += " (" + Math.round(port.getChance() * 100) + "%)";
             }
@@ -511,8 +511,15 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
             // Both directions read the balance's effective totals: recomputing outputs from the
             // operation count showed rounded rates next to exact input rates on the same node.
             final float total = effectiveTotal(nb, index, output, fs.amount);
-            return GuiHelper.formatRate(total / sec) + "/s " + fs.getLocalizedName();
+            return GuiHelper.formatRate(total / sec) + "/s " + portDisplayName(port);
         }
+        return null;
+    }
+
+    @Nullable
+    private static String portDisplayName(final Port<?> port) {
+        if (port.getType() == RecipePropertyAPI.ITEM) return ((ItemStack) port.getValue()).getDisplayName();
+        if (port.getType() == RecipePropertyAPI.FLUID) return ((FluidStack) port.getValue()).getLocalizedName();
         return null;
     }
 
@@ -654,7 +661,8 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         final int y0 = CONTENT_TOP + neiWidget.h + THROUGHPUT_GAP + calcInfoHeight();
         final MachineProfile profile = node.machineConfig.getProfile();
         int panelH = (profile.settings()
-            .size() + 2) * LINE_H + 4;
+            .size() + 2
+            + targetableOutputs().size()) * LINE_H + 4;
         if (node.getAvailableExtractors()
             .size() > 1) panelH += LINE_H;
         GuiDraw.drawRect(
@@ -685,6 +693,22 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
 
         for (final SettingDef<?> def : profile.settings()) {
             y = drawSetting(x, y, def, c);
+        }
+
+        // One row per output: pin the rate the chart should produce, 0 = unpinned. This is the
+        // AUTO-mode anchor a player actually thinks in - "10/s of this" - instead of working
+        // backwards to a machine count.
+        for (final int out : targetableOutputs()) {
+            final int idx = out;
+            final double current = node.targetOutputRates.getOrDefault(idx, 0.0);
+            final String name = portDisplayName(node.outputs.get(idx));
+            final String label = "Tgt " + shorten(name)
+                + (current > 0 ? " " + GuiHelper.formatRate((float) current) + "/s" : " off");
+            y = drawConfigIntField(x, y, label, (int) Math.round(current), 0, 1_000_000, v -> {
+                if (v <= 0) node.targetOutputRates.remove(idx);
+                else node.targetOutputRates.put(idx, (double) v);
+                onConfigChanged();
+            });
         }
 
         if (node.getAvailableExtractors()
@@ -767,10 +791,27 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         if (!configOpen) return 0;
         final MachineProfile profile = node.machineConfig.getProfile();
         int h = (profile.settings()
-            .size() + 2) * LINE_H + 8;
+            .size() + 2
+            + targetableOutputs().size()) * LINE_H + 8;
         if (node.getAvailableExtractors()
             .size() > 1) h += LINE_H;
         return h;
+    }
+
+    /** Output indices that get a target row: the same ports the throughput list shows. */
+    private List<Integer> targetableOutputs() {
+        final List<Integer> result = new ArrayList<>();
+        for (int i = 0; i < node.outputs.size(); i++) {
+            if (hasVisibleAmount(node.outputs.get(i)) && portDisplayName(node.outputs.get(i)) != null) {
+                result.add(i);
+            }
+        }
+        return result;
+    }
+
+    /** Config-panel rows are ~28 chars wide; the rate suffix needs the tail. */
+    private static String shorten(final String name) {
+        return name.length() <= 12 ? name : name.substring(0, 11) + '…';
     }
 
     private int drawConfigIntField(final int x, final int y, final String label, final int value, final int min,
