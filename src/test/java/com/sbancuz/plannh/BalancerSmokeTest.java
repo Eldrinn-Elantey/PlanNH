@@ -24,8 +24,7 @@ import com.sbancuz.plannh.harness.GtnhFlowLoader.LoadedChart;
  */
 class BalancerSmokeTest {
 
-    // Target pins anchor the sink counts, which is what makes the big charts expensive:
-    // nanocircuits (400 assembly lines for 1/s) takes ~19s anchored against ~6.7s un-anchored.
+    // Target pins are AUTO's anchors; OUTPUT ignores them, so these solves run unanchored.
     // TODO: 30s is the relaxed beta figure; bring it back down as solve times allow.
     private static final Duration BUDGET = Duration.ofSeconds(30);
 
@@ -99,14 +98,13 @@ class BalancerSmokeTest {
     /**
      * The gtnh-flow contract at the Balancer level: an unpinned chart in AUTO mode shows NO
      * quantities - zero counts, empty effective rates (so no throughput rows and an empty
-     * summary), and a note telling the user how to ask for a balance. mk1's only pin is a
-     * target: pin, which the loader turns into an OUTPUT/INPUT-shaped machine-count anchor;
-     * AUTO takes target pins as real constraints instead, so that anchor is cleared first.
+     * summary), and a note telling the user how to ask for a balance. mk1's only pin is its
+     * target: rate, so clearing that leaves an unpinned chart.
      */
     @org.junit.jupiter.api.Test
     void autoModeUnpinned_showsNoQuantities() {
         final LoadedChart chart = GtnhFlowLoader.load("mk1");
-        GtnhFlowLoader.clearTargetAnchors(chart);
+        GtnhFlowLoader.clearTargetPins(chart);
 
         final BalanceResult result = Balancer.balance(chart.graph(), BalanceMode.AUTO, false);
 

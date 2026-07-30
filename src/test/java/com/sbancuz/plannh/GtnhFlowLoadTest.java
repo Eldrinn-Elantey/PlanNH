@@ -54,10 +54,10 @@ class GtnhFlowLoadTest {
         assertEquals("fusion reactor", fusion.machineName);
         assertEquals(5, fusion.durationTicks);
 
-        // The target pin fixes the count: 100 fuel per 5t = 400/s per machine, so 10/s needs
-        // ceil(10 / 400) = 1 machine.
-        assertTrue(fusion.isMachineCountFixed(), "target: pin must fix the machine count");
-        assertEquals(1, fusion.machineConfig.getMachineCount());
+        // The target pin lands on the node itself: output 0 is the fuel, pinned at 10/s. The
+        // count stays free - AUTO derives the exact fractional extent from the rate.
+        assertTrue(!fusion.isMachineCountFixed(), "a target: pin must not fix the machine count");
+        assertEquals(10.0, fusion.targetOutputRates.get(0), 1e-9, "10/s on the fuel output");
     }
 
     @Test

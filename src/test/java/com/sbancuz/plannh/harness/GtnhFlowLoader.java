@@ -34,9 +34,9 @@ import com.sbancuz.plannh.data.flowchart.Node;
  * <ul>
  * <li>{@code number: N} - the machine count is fixed to N (maps to PlanNH's fixed machine
  * count).</li>
- * <li>{@code target: {ingredient: rate}} - a desired output rate; approximated by fixing the
- * machine count to {@code ceil(target / perMachineRate)}, and surfaced on the
- * {@link LoadedChart} so the future AUT solver mode can treat it as a real constraint.</li>
+ * <li>{@code target: {ingredient: rate}} - a desired output rate; maps to the node's target
+ * output rate pin, which AUTO holds exactly. Also surfaced on {@link LoadedChart#pins()} for
+ * tests that want to rescale or clear it.</li>
  * </ul>
  */
 public final class GtnhFlowLoader {
@@ -136,13 +136,15 @@ public final class GtnhFlowLoader {
             }
             if (entry.get("target") instanceof final Map<?, ?> targets) {
                 for (final Map.Entry<?, ?> t : targets.entrySet()) {
-                    pins.add(
-                        new Pin(
-                            "target",
-                            machineIndex,
-                            node.machineName,
-                            String.valueOf(t.getKey()),
-                            asDouble(t.getValue(), 0)));
+                    final String ingredient = String.valueOf(t.getKey());
+                    final double rate = asDouble(t.getValue(), 0);
+                    pins.add(new Pin("target", machineIndex, node.machineName, ingredient, rate));
+                    for (int out = 0; out < node.outputs.size(); out++) {
+                        if (TestIngredients.nameOf(node.outputs.get(out))
+                            .equals(ingredient)) {
+                            node.targetOutputRates.put(out, rate);
+                        }
+                    }
                 }
             }
 
@@ -168,48 +170,18 @@ public final class GtnhFlowLoader {
             }
         }
 
-        applyTargetPins(machines, pins);
-
         return new LoadedChart(name, graph, machines, pins);
     }
 
     /**
-     * Approximates a target pin the way a player would: fix the machine count to
-     * {@code ceil(target / perMachineRate)} so OUTPUT/INPUT mode solves anchor on it. Only valid
-     * for those modes - the future AUT solver mode replaces this with a real target constraint,
-     * which is why the pins stay surfaced on {@link LoadedChart#pins()}.
+     * Clears every target-rate pin, for tests that need the unpinned chart or want to re-pin at
+     * a different scale. Leaves {@code number:} pins (fixed counts) alone.
      */
-    /**
-     * Undoes {@link #applyTargetPins} for AUTO-mode tests: that anchor is the OUTPUT/INPUT
-     * approximation, and AUTO takes the same pins as real constraints instead, so a chart it is
-     * given must carry only its wiring.
-     */
-    public static void clearTargetAnchors(final LoadedChart chart) {
+    public static void clearTargetPins(final LoadedChart chart) {
         for (final Pin pin : chart.pins()) {
             if (!"target".equals(pin.kind())) continue;
-            final Node node = chart.machines()
-                .get(pin.machineIndex());
-            node.machineConfig.setMachineCount(1);
-            node.setMachineCountFixed(false);
-        }
-    }
-
-    private static void applyTargetPins(final List<Node> machines, final List<Pin> pins) {
-        for (final Pin pin : pins) {
-            if (!"target".equals(pin.kind())) continue;
-            final Node node = machines.get(pin.machineIndex());
-            double perOp = 0;
-            for (final var port : node.outputs) {
-                if (TestIngredients.nameOf(port)
-                    .equals(pin.ingredient())) {
-                    perOp = TestIngredients.quantityOf(port);
-                    break;
-                }
-            }
-            if (perOp <= 0 || node.durationTicks <= 0) continue;
-            final double perMachineRate = perOp * TICKS_PER_SECOND / node.durationTicks;
-            node.machineConfig.setMachineCount((int) Math.ceil(pin.value() / perMachineRate));
-            node.setMachineCountFixed(true);
+            chart.machines()
+                .get(pin.machineIndex()).targetOutputRates.clear();
         }
     }
 

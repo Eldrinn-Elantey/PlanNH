@@ -205,7 +205,12 @@ public final class Serializer {
             obj.addProperty("x", node.x);
             obj.addProperty("y", node.y);
             obj.addProperty("machine", node.machineName);
-            obj.add("recipeId", node.recipeId.toJsonObject());
+            // Null-tolerant on both sides: a node whose recipe never resolved must not make the
+            // whole slot unsaveable, and everything downstream already treats a null recipeId as
+            // "handler unavailable" (RecipeHandlerRef.of is null-safe).
+            if (node.recipeId != null) {
+                obj.add("recipeId", node.recipeId.toJsonObject());
+            }
             obj.addProperty("handlerRecipeIndex", node.handlerRecipeIndex);
             obj.addProperty("extractorIndex", node.getExtractorIndex());
             obj.addProperty("machineCount", node.machineConfig.getMachineCount());
@@ -290,9 +295,11 @@ public final class Serializer {
             final Node node = new Node(id, x, y);
             node.machineName = obj.get("machine")
                 .getAsString();
-            node.recipeId = Recipe.RecipeId.of(
-                obj.get("recipeId")
-                    .getAsJsonObject());
+            if (obj.has("recipeId")) {
+                node.recipeId = Recipe.RecipeId.of(
+                    obj.get("recipeId")
+                        .getAsJsonObject());
+            }
             node.handlerRecipeIndex = obj.has("handlerRecipeIndex") ? obj.get("handlerRecipeIndex")
                 .getAsInt() : 0;
             node.setExtractorIndex(

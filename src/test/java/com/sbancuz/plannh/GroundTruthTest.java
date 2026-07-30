@@ -82,8 +82,7 @@ class GroundTruthTest {
         // (discard excess beats supplying an intermediate). Optima enumeration must find exactly
         // these two.
         final LoadedChart chart = GtnhFlowLoader.load("mk1");
-        final Map<UUID, Double> pins = targetPins(chart);
-        final Result result = AutoBalancer.solve(chart.graph(), pins);
+        final Result result = AutoBalancer.solve(chart.graph());
         assertTrue(result.isSuccess(), () -> "solve failed: " + result.failure());
         final Solution s = result.solution();
 
@@ -102,7 +101,7 @@ class GroundTruthTest {
             "sink sits on the DT's heavy naquadah output");
         assertEquals(0.25, sink.ratePerSecond(), EPS, "0.25/s heavy naquadah discarded");
 
-        final List<Set<PortRef>> alternatives = AutoBalancer.enumerateAlternatives(chart.graph(), pins);
+        final List<Set<PortRef>> alternatives = AutoBalancer.enumerateAlternatives(chart.graph(), Map.of());
         assertEquals(2, alternatives.size(), "exactly two tied optima: sink heavy, source light");
     }
 
@@ -222,7 +221,7 @@ class GroundTruthTest {
         // pin; dropping the loader's count anchor for it and passing no pins of our own is
         // exactly the unpinned case.
         final LoadedChart chart = GtnhFlowLoader.load("mk1");
-        GtnhFlowLoader.clearTargetAnchors(chart);
+        GtnhFlowLoader.clearTargetPins(chart);
         final Result result = AutoBalancer.solve(chart.graph());
 
         assertTrue(!result.isSuccess(), "unpinned chart must not be balanced");
@@ -350,7 +349,7 @@ class GroundTruthTest {
         // this guards - it reads on screen as a working plan with a dead machine in it.
         for (final String name : GtnhFlowLoader.CORPUS) {
             final LoadedChart chart = GtnhFlowLoader.load(name);
-            final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
+            final Result result = AutoBalancer.solve(chart.graph());
             assertTrue(result.isSuccess(), () -> name + " failed: " + result.failure());
             assertAllMachinesRun(chart, result.solution());
         }
@@ -372,7 +371,7 @@ class GroundTruthTest {
                 id -> chart.graph()
                     .removeEdge(id));
 
-        final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
+        final Result result = AutoBalancer.solve(chart.graph());
 
         assertTrue(result.isSuccess(), () -> "solve failed: " + result.failure());
         for (final Node machine : chart.machines()) {
@@ -395,9 +394,9 @@ class GroundTruthTest {
             Double normalizedQuantity = null;
             for (final double f : new double[] { 1.0, 0.5, 0.1, 0.01, 0.001 }) {
                 final LoadedChart chart = GtnhFlowLoader.load(name);
-                GtnhFlowLoader.clearTargetAnchors(chart);
                 final Map<UUID, Double> scaled = new HashMap<>();
                 targetPins(chart).forEach((id, extent) -> scaled.put(id, extent * f));
+                GtnhFlowLoader.clearTargetPins(chart);
 
                 final Result result = AutoBalancer.solve(chart.graph(), scaled);
                 assertTrue(result.isSuccess(), () -> name + " @" + f + " failed: " + result.failure());
@@ -431,7 +430,7 @@ class GroundTruthTest {
             .next();
         stale.targetInputIndex = 99;
 
-        final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
+        final Result result = AutoBalancer.solve(chart.graph());
 
         assertTrue(result.isSuccess(), () -> "solve failed: " + result.failure());
         assertPortsConserve("mk1 with a stale edge", chart, result.solution());
@@ -444,7 +443,7 @@ class GroundTruthTest {
         // re-assert the solver's opinion of itself.
         for (final String name : GtnhFlowLoader.CORPUS) {
             final LoadedChart chart = GtnhFlowLoader.load(name);
-            final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
+            final Result result = AutoBalancer.solve(chart.graph());
             assertTrue(result.isSuccess(), () -> name + " failed: " + result.failure());
             assertPortsConserve(name, chart, result.solution());
         }
@@ -505,7 +504,7 @@ class GroundTruthTest {
     // ---------------------------------------------------------------------------------------
 
     private static Solution solve(final LoadedChart chart) {
-        final Result result = AutoBalancer.solve(chart.graph(), targetPins(chart));
+        final Result result = AutoBalancer.solve(chart.graph());
         assertTrue(result.isSuccess(), () -> chart.name() + " solve failed: " + result.failure());
         return result.solution();
     }
