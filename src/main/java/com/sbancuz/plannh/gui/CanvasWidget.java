@@ -14,6 +14,7 @@ import com.cleanroommc.modularui.api.UpOrDown;
 import com.cleanroommc.modularui.api.layout.IViewport;
 import com.cleanroommc.modularui.api.layout.IViewportStack;
 import com.cleanroommc.modularui.api.widget.IDraggable;
+import com.cleanroommc.modularui.api.widget.IFocusedWidget;
 import com.cleanroommc.modularui.api.widget.Interactable;
 import com.cleanroommc.modularui.drawable.BufferBuilder;
 import com.cleanroommc.modularui.drawable.GuiDraw;
@@ -773,11 +774,15 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
     @Nullable
     private Menu<?> targetEditorMenu;
     @Nullable
+    private IFocusedWidget targetEditorField;
+    @Nullable
     private Node targetEditNode;
     private int targetEditOutput = -1;
+    private boolean focusTargetEditor;
 
-    public void setTargetEditorMenu(final Menu<?> menu) {
+    public void setTargetEditorMenu(final Menu<?> menu, final IFocusedWidget field) {
         targetEditorMenu = menu;
+        targetEditorField = field;
     }
 
     public boolean isTargetEditorOpen() {
@@ -789,6 +794,18 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         targetEditOutput = outputIndex;
         if (targetEditorMenu != null) {
             targetEditorMenu.pos(getContext().getAbsMouseX(), getContext().getAbsMouseY());
+        }
+        // Deferred one frame: the panel ends every mouse press with removeFocus(), which would
+        // immediately undo a focus taken during the opening click.
+        focusTargetEditor = true;
+    }
+
+    @Override
+    public void onUpdate() {
+        super.onUpdate();
+        if (focusTargetEditor && targetEditorField != null) {
+            getContext().focus(targetEditorField);
+            focusTargetEditor = false;
         }
     }
 

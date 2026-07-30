@@ -128,15 +128,15 @@ public class FlowchartScreen extends ModularScreen {
         // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
         // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
         final Menu<?> targetEditor = new Menu<>();
+        final TextFieldWidget targetField = new TextFieldWidget().numbersDouble(0, 1_000_000)
+            .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
+            .size(70, 14);
         targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
             .coverChildren()
             .background()
             .relativeToScreen()
-            .child(
-                new TextFieldWidget().numbersDouble(0, 1_000_000)
-                    .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
-                    .size(70, 14));
-        canvas.setTargetEditorMenu(targetEditor);
+            .child(targetField);
+        canvas.setTargetEditorMenu(targetEditor, targetField);
 
         final SlotSet set = PlanAPI.getSlotSet();
 
@@ -331,15 +331,15 @@ public class FlowchartScreen extends ModularScreen {
         // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
         // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
         final Menu<?> targetEditor = new Menu<>();
+        final TextFieldWidget targetField = new TextFieldWidget().numbersDouble(0, 1_000_000)
+            .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
+            .size(70, 14);
         targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
             .coverChildren()
             .background()
             .relativeToScreen()
-            .child(
-                new TextFieldWidget().numbersDouble(0, 1_000_000)
-                    .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
-                    .size(70, 14));
-        canvas.setTargetEditorMenu(targetEditor);
+            .child(targetField);
+        canvas.setTargetEditorMenu(targetEditor, targetField);
 
         final SlotSet set = PlanAPI.getSlotSet();
         if (set.slots.size() <= 1) return;
@@ -352,15 +352,15 @@ public class FlowchartScreen extends ModularScreen {
         // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
         // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
         final Menu<?> targetEditor = new Menu<>();
+        final TextFieldWidget targetField = new TextFieldWidget().numbersDouble(0, 1_000_000)
+            .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
+            .size(70, 14);
         targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
             .coverChildren()
             .background()
             .relativeToScreen()
-            .child(
-                new TextFieldWidget().numbersDouble(0, 1_000_000)
-                    .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
-                    .size(70, 14));
-        canvas.setTargetEditorMenu(targetEditor);
+            .child(targetField);
+        canvas.setTargetEditorMenu(targetEditor, targetField);
 
         final SlotSet set = PlanAPI.getSlotSet();
         final int n = set.slots.size() + 1;
@@ -375,15 +375,15 @@ public class FlowchartScreen extends ModularScreen {
         // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
         // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
         final Menu<?> targetEditor = new Menu<>();
+        final TextFieldWidget targetField = new TextFieldWidget().numbersDouble(0, 1_000_000)
+            .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
+            .size(70, 14);
         targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
             .coverChildren()
             .background()
             .relativeToScreen()
-            .child(
-                new TextFieldWidget().numbersDouble(0, 1_000_000)
-                    .value(new DoubleValue.Dynamic(canvas::editedTargetRate, canvas::setEditedTargetRate))
-                    .size(70, 14));
-        canvas.setTargetEditorMenu(targetEditor);
+            .child(targetField);
+        canvas.setTargetEditorMenu(targetEditor, targetField);
 
         final SlotSet set = PlanAPI.getSlotSet();
         if (set.slots.size() <= 1) return;
