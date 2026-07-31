@@ -1,9 +1,8 @@
-# The in-game chart from the 2026-07-13 discussion screenshots (naquadah line with the tiberium
-# chemical bath consuming the excess heavy naquadah fuel). Rates match the screenshots exactly:
-# fusion 14.4/s heavy + 31.2/s light -> 4/s mk1 fuel (pinned x1, "Fixed" checkbox), DT 20/s
-# solution -> 5/s heavy + 10/s light per machine, bath 0.05/s diamond + 7.2/s heavy -> 0.05/s
-# tiberium. The zero-external steady state is DT x3.12 + bath x0.167 (unique; light pins the DT,
-# heavy then pins the bath) - all fractional.
+# Naquadah line with a tiberium chemical bath consuming the excess heavy naquadah fuel:
+# fusion 14.4/s heavy + 31.2/s light -> 4/s mk1 fuel (pinned x1), DT 20/s solution -> 5/s heavy
+# + 10/s light per machine, bath 0.05/s diamond + 7.2/s heavy -> 0.05/s tiberium. The
+# zero-external steady state is DT x3.12 + bath x0.167 (unique; light pins the DT, heavy then
+# pins the bath) - all fractional.
 - m: fusion reactor
   tier: LuV
   I:

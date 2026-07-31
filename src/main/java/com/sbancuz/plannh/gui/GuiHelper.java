@@ -15,10 +15,8 @@ public final class GuiHelper {
     }
 
     /**
-     * Machine-count display: integral counts stay bare ("4"), fractional counts keep two
-     * decimals ("3.12", "0.17") so balanced charts stay auditable by hand. A count that is
-     * genuinely nonzero never collapses to "0" - a machine that runs 0.001 of the time is still
-     * wired in, and rendering it idle sends the user hunting for a break that isn't there.
+     * Machine-count display: integral counts stay bare ("4"), fractional keep two decimals. A
+     * genuinely nonzero count never collapses to "0" - the machine is wired in, not idle.
      */
     public static String formatCount(final double count) {
         final long rounded = Math.round(count);
@@ -35,9 +33,9 @@ public final class GuiHelper {
     }
 
     /**
-     * Rate display, the single authority for per-second amounts: compact above a thousand,
-     * two decimals down to 1, five below - fractional machine counts routinely produce
-     * trickle rates that fewer digits would round to an all-zero line.
+     * Rate display, the single authority for per-second amounts. Not MUI2's NumberFormat: its SI
+     * prefixes kick in at 10k and milli-fy trickle rates, and the never-collapse-to-zero rule is
+     * not expressible there.
      */
     public static String formatRate(final float rate) {
         // G, not B: fluid amounts already use B for buckets, and that is how players read it.

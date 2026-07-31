@@ -5,6 +5,7 @@ import static org.lwjgl.opengl.GL11.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.IntConsumer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -365,7 +366,6 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
             final double simpleOps = simpleNb != null ? simpleNb.operations() : 1;
             final int simpleDurPerOp = simpleNb != null ? simpleNb.durationPerOp() : node.durationTicks;
             final StringBuilder simpleTiming = new StringBuilder();
-            // No balance (unpinned Auto): the chart is just wiring, so no count is shown.
             if (simpleOps > 0) {
                 simpleTiming.append("\u00d7")
                     .append(GuiHelper.formatCount(simpleOps));
@@ -523,30 +523,14 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
     private String portLabel(final Port<?> port, final int index, final NodeBalance nb, final float sec,
         final boolean output) {
         if (!hasVisibleAmount(port)) return null;
-        if (port.getType() == RecipePropertyAPI.ITEM) {
-            final ItemStack stack = (ItemStack) port.getValue();
-            final float total = effectiveTotal(nb, index, output, stack.stackSize);
-            String label = GuiHelper.formatRate(total / sec) + "/s " + portDisplayName(port);
-            if (output && port.getChance() < 0.999f) {
-                label += " (" + Math.round(port.getChance() * 100) + "%)";
-            }
-            return label;
+        // Both directions read the balance's effective totals so exact rates sit next to exact
+        // rates on the same node.
+        final float total = effectiveTotal(nb, index, output, port.getAmount());
+        String label = GuiHelper.formatRate(total / sec) + "/s " + port.getDisplayName();
+        if (output && port.getChance() < 0.999f) {
+            label += " (" + Math.round(port.getChance() * 100) + "%)";
         }
-        if (port.getType() == RecipePropertyAPI.FLUID) {
-            final FluidStack fs = (FluidStack) port.getValue();
-            // Both directions read the balance's effective totals: recomputing outputs from the
-            // operation count showed rounded rates next to exact input rates on the same node.
-            final float total = effectiveTotal(nb, index, output, fs.amount);
-            return GuiHelper.formatRate(total / sec) + "/s " + portDisplayName(port);
-        }
-        return null;
-    }
-
-    @Nullable
-    private static String portDisplayName(final Port<?> port) {
-        if (port.getType() == RecipePropertyAPI.ITEM) return ((ItemStack) port.getValue()).getDisplayName();
-        if (port.getType() == RecipePropertyAPI.FLUID) return ((FluidStack) port.getValue()).getLocalizedName();
-        return null;
+        return label;
     }
 
     private static float effectiveTotal(final NodeBalance nb, final int index, final boolean output,
@@ -686,11 +670,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         final int x = LEFT_CONTENT_X;
         final int y0 = CONTENT_TOP + neiWidget.h + THROUGHPUT_GAP + calcInfoHeight();
         final MachineProfile profile = node.machineConfig.getProfile();
-        int panelH = (profile.settings()
-            .size() + 2
-            + targetableOutputs().size()) * LINE_H + 4;
-        if (node.getAvailableExtractors()
-            .size() > 1) panelH += LINE_H;
+        final int panelH = configRowsHeight() + 4;
         GuiDraw.drawRect(
             x - CONFIG_PANEL_INSET,
             y0 - CONFIG_PANEL_INSET,
@@ -721,16 +701,17 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
             y = drawSetting(x, y, def, c);
         }
 
-        // One row per output: pin the rate the chart should produce. This is the AUTO-mode anchor
-        // a player actually thinks in - "10/s of this" - instead of working backwards to a
-        // machine count. The row opens a text editor; rates are typed, not stepped.
+        // One row per output: pin the rate the chart should produce. The row opens a text
+        // editor; rates are typed, not stepped.
         final FontRenderer font = Minecraft.getMinecraft().fontRenderer;
         for (final int idx : targetableOutputs()) {
             final double current = node.targetOutputRates.getOrDefault(idx, 0.0);
             final String value = current > 0 ? GuiHelper.formatRate((float) current) + "/s" : "off";
             final int valueW = font.getStringWidth(value);
-            final String label = font
-                .trimStringToWidth("Tgt " + portDisplayName(node.outputs.get(idx)), TARGET_ROW_W - valueW - 6);
+            final String label = font.trimStringToWidth(
+                "Tgt " + node.outputs.get(idx)
+                    .getDisplayName(),
+                TARGET_ROW_W - valueW - 6);
             GuiDraw.drawText(label, x, y, 1.0f, PlannhColors.TEXT_LIGHT.getColor(), false);
             GuiDraw.drawText(
                 value,
@@ -822,11 +803,13 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
     }
 
     private int computeConfigPanelHeight() {
-        if (!configOpen) return 0;
-        final MachineProfile profile = node.machineConfig.getProfile();
-        int h = (profile.settings()
-            .size() + 2
-            + targetableOutputs().size()) * LINE_H + 8;
+        return configOpen ? configRowsHeight() + 8 : 0;
+    }
+
+    private int configRowsHeight() {
+        int h = (node.machineConfig.getProfile()
+            .settings()
+            .size() + 2 + targetableOutputs().size()) * LINE_H;
         if (node.getAvailableExtractors()
             .size() > 1) h += LINE_H;
         return h;
@@ -836,7 +819,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
     private List<Integer> targetableOutputs() {
         final List<Integer> result = new ArrayList<>();
         for (int i = 0; i < node.outputs.size(); i++) {
-            if (hasVisibleAmount(node.outputs.get(i)) && portDisplayName(node.outputs.get(i)) != null) {
+            if (hasVisibleAmount(node.outputs.get(i))) {
                 result.add(i);
             }
         }
@@ -844,7 +827,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
     }
 
     private int drawConfigIntField(final int x, final int y, final String label, final int value, final int min,
-        final int max, final java.util.function.IntConsumer setter) {
+        final int max, final IntConsumer setter) {
         GuiDraw.drawText(label + " " + value, x, y, 1.0f, PlannhColors.TEXT_LIGHT.getColor(), false);
         GuiDraw.drawText("[-]", x + SETTING_DEC_X, y, 1.0f, PlannhColors.TEXT_MUTED.getColor(), false);
         GuiDraw.drawText("[+]", x + SETTING_INC_X, y, 1.0f, PlannhColors.TEXT_MUTED.getColor(), false);

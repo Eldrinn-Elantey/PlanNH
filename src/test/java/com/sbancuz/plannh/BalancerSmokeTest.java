@@ -1,15 +1,18 @@
 package com.sbancuz.plannh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.sbancuz.plannh.data.flowchart.AutoBalancer;
 import com.sbancuz.plannh.data.flowchart.Balancer;
 import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
@@ -76,16 +79,16 @@ class BalancerSmokeTest {
      * editing it. The reported operation count is the exact fractional machine count - no
      * rounding anywhere, so every displayed number can be checked against every other by hand.
      */
-    @org.junit.jupiter.api.Test
+    @Test
     void autoModeReportsExactFractionalCounts_andDoesNotWriteThemBack() {
         final LoadedChart chart = GtnhFlowLoader.load("loopGraph");
         final Node lcr = chart.machine(1);
-        assertTrue(!lcr.isMachineCountFixed());
+        assertFalse(lcr.isMachineCountFixed());
         lcr.machineConfig.setMachineCount(3);
 
         final BalanceResult result = Balancer.balance(chart.graph(), BalanceMode.AUTO, false);
 
-        assertTrue(lcr.machineConfig.getMachineCount() == 3, "configured count must survive viewing");
+        assertEquals(3, lcr.machineConfig.getMachineCount(), "configured count must survive viewing");
         assertEquals(
             8.0 / 15.0,
             result.nodeBalances()
@@ -101,7 +104,7 @@ class BalancerSmokeTest {
      * summary), and a note telling the user how to ask for a balance. mk1's only pin is its
      * target: rate, so clearing that leaves an unpinned chart.
      */
-    @org.junit.jupiter.api.Test
+    @Test
     void autoModeUnpinned_showsNoQuantities() {
         final LoadedChart chart = GtnhFlowLoader.load("mk1");
         GtnhFlowLoader.clearTargetPins(chart);
@@ -131,26 +134,17 @@ class BalancerSmokeTest {
      * Solver notes must reach the BalanceResult (and from there the summary widget): the
      * missing-edge diagnostic was useless while it only went to the log.
      */
-    @org.junit.jupiter.api.Test
+    @Test
     void autoModeSurfacesMissingEdgeNotes() {
         final LoadedChart chart = GtnhFlowLoader.load("mk1_tiberium");
-        final Node fusion = chart.machine(0);
-        chart.graph()
-            .getEdges()
-            .stream()
-            .filter(e -> e.targetNodeId.equals(fusion.id) && e.targetInputIndex == 0)
-            .map(e -> e.id)
-            .toList()
-            .forEach(
-                id -> chart.graph()
-                    .removeEdge(id));
+        GtnhFlowLoader.removeEdgesInto(chart, chart.machine(0), 0);
 
         final BalanceResult result = Balancer.balance(chart.graph(), BalanceMode.AUTO, false);
 
         assertTrue(
             result.notes()
                 .stream()
-                .anyMatch(n -> n.contains("missing an edge")),
+                .anyMatch(n -> n.contains(AutoBalancer.MISSING_EDGE)),
             "the wiring diagnostic must reach the summary, got: " + result.notes());
     }
 

@@ -907,11 +907,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         targetFocusPending = true;
     }
 
-    /**
-     * True exactly once per editor opening, and only while the editor is still open. The field
-     * itself polls this from its update listener - the one place where focusing is safe by
-     * construction, because the listener only runs on a widget that is in the tree.
-     */
+    /** True exactly once per editor opening, and only while the editor is still open. */
     public boolean consumeTargetEditorFocus() {
         if (!targetFocusPending || targetEditNode == null) return false;
         targetFocusPending = false;

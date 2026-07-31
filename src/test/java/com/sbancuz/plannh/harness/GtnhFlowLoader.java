@@ -41,7 +41,9 @@ import com.sbancuz.plannh.data.flowchart.Node;
  */
 public final class GtnhFlowLoader {
 
-    public record Pin(String kind, int machineIndex, String machineName, String ingredient, double value) {}
+    /** {@code outputIndex} is the resolved output port for target pins, -1 for number pins. */
+    public record Pin(String kind, int machineIndex, String machineName, String ingredient, double value,
+        int outputIndex) {}
 
     public record LoadedChart(String name, Graph graph, List<Node> machines, List<Pin> pins) {
 
@@ -132,17 +134,17 @@ public final class GtnhFlowLoader {
                 final int count = (int) asDouble(entry.get("number"), 1.0);
                 node.machineConfig.setMachineCount(count);
                 node.setMachineCountFixed(true);
-                pins.add(new Pin("number", machineIndex, node.machineName, null, count));
+                pins.add(new Pin("number", machineIndex, node.machineName, null, count, -1));
             }
             if (entry.get("target") instanceof final Map<?, ?> targets) {
                 for (final Map.Entry<?, ?> t : targets.entrySet()) {
                     final String ingredient = String.valueOf(t.getKey());
                     final double rate = asDouble(t.getValue(), 0);
-                    pins.add(new Pin("target", machineIndex, node.machineName, ingredient, rate));
                     for (int out = 0; out < node.outputs.size(); out++) {
                         if (TestIngredients.nameOf(node.outputs.get(out))
                             .equals(ingredient)) {
                             node.targetOutputRates.put(out, rate);
+                            pins.add(new Pin("target", machineIndex, node.machineName, ingredient, rate, out));
                         }
                     }
                 }
@@ -183,6 +185,20 @@ public final class GtnhFlowLoader {
             chart.machines()
                 .get(pin.machineIndex()).targetOutputRates.clear();
         }
+    }
+
+    /** Removes every edge delivering into the given machine input; returns how many there were. */
+    public static int removeEdgesInto(final LoadedChart chart, final Node machine, final int inputIndex) {
+        final List<UUID> ids = chart.graph()
+            .getEdges()
+            .stream()
+            .filter(e -> e.targetNodeId.equals(machine.id) && e.targetInputIndex == inputIndex)
+            .map(e -> e.id)
+            .toList();
+        ids.forEach(
+            id -> chart.graph()
+                .removeEdge(id));
+        return ids.size();
     }
 
     private static Map<String, Double> ioMap(final Object raw) {

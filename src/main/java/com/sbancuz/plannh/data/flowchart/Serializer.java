@@ -133,9 +133,8 @@ public final class Serializer {
             final JsonObject obj = elem.getAsJsonObject();
             final String name = obj.get("name")
                 .getAsString();
-            // Per slot: one chart that cannot be read costs the player that chart, not the whole
-            // save. An empty graph keeps the slot (and its name) in place rather than silently
-            // renumbering everything after it.
+            // One unreadable chart costs that chart, not the save; the empty graph keeps slot
+            // numbering in place.
             try {
                 set.slots.add(
                     new SlotSet.Slot(
@@ -216,9 +215,8 @@ public final class Serializer {
             obj.addProperty("x", node.x);
             obj.addProperty("y", node.y);
             obj.addProperty("machine", node.machineName);
-            // Null-tolerant on both sides: a node whose recipe never resolved must not make the
-            // whole slot unsaveable, and everything downstream already treats a null recipeId as
-            // "handler unavailable" (RecipeHandlerRef.of is null-safe).
+            // Null-tolerant on both sides: an unresolved recipe must not make the slot
+            // unsaveable, and downstream treats a null recipeId as "handler unavailable".
             if (node.recipeId != null) {
                 obj.add("recipeId", node.recipeId.toJsonObject());
             }
@@ -327,8 +325,7 @@ public final class Serializer {
             node.setMachineCountFixed(
                 obj.has("machineCountFixed") && obj.get("machineCountFixed")
                     .getAsBoolean());
-            // Read independently of every other key - conditional reads are how the
-            // default-profile settings were silently dropped on load.
+            // Read independently of every other key.
             if (obj.has("targets")) {
                 for (final Map.Entry<String, JsonElement> t : obj.getAsJsonObject("targets")
                     .entrySet()) {

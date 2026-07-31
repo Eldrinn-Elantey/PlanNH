@@ -10,10 +10,7 @@ import com.sbancuz.plannh.data.flowchart.Serializer;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 import com.sbancuz.plannh.harness.GtnhFlowLoader.LoadedChart;
 
-/**
- * Target pins must survive save/load: a lost pin silently unpins the chart, which after the
- * default-profile settings bug is a failure mode this codebase has to prove absent.
- */
+/** Target pins must survive save/load: a lost pin silently unpins the chart. */
 class TargetRoundTripTest {
 
     @Test

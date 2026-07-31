@@ -102,10 +102,8 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
         }
 
         // Net by resource: output = max(0, prod - cons), input = max(0, cons - prod).
-        // Relative tolerance: solver flows arrive as float sums, so a fully recycled resource
-        // can miss exact equality and would show as a tiny junk line. Float-noise scale only -
-        // at 1e-4 a real 1-unit shortfall on a 10k/cycle resource was deleted as "balanced",
-        // and an under-built chart read as complete.
+        // Relative tolerance at float-noise scale only: solver flows arrive as float sums, so a
+        // fully recycled resource can miss exact equality; anything looser hides real shortfalls.
         final Map<LineKey, Float> netInputs = new HashMap<>();
         for (final var entry : inputMap.entrySet()) {
             final LineKey key = entry.getKey();

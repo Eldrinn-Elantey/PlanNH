@@ -33,6 +33,14 @@ public final class Balancer {
          */
         AUTO;
 
+        /**
+         * AUTO reports exact per-second rates and ignores opsMode: the summary would rescale to
+         * per-cycle totals and net recycled ingredients into phantom lines.
+         */
+        public boolean usesOpsMode() {
+            return this == OUTPUT || this == INPUT;
+        }
+
         public String displayName() {
             return StatCollector.translateToLocal(
                 "plannh.gui.balancer_mode." + this.name()
@@ -120,11 +128,9 @@ public final class Balancer {
     }
 
     /**
-     * Builds the balance result from (possibly fractional) machine counts. Everything - the
-     * displayed count, the effective rates, the totals - derives from the exact fractional
-     * count, so every displayed number is auditable against every other. A fractional count
-     * reads as that machine's duty cycle; rounding up for physical placement is the reader's
-     * one-step mental operation, not something the math does behind their back.
+     * Builds the balance result from (possibly fractional) machine counts. Every displayed
+     * number derives from the exact fractional count; rounding up for placement is left to the
+     * reader.
      */
     @Nonnull
     static BalanceResult buildResultFractional(final Graph graph, final Map<UUID, Double> machineCounts,

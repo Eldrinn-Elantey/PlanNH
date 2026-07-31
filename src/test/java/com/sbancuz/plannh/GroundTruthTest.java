@@ -1,12 +1,12 @@
 package com.sbancuz.plannh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -79,8 +79,7 @@ class GroundTruthTest {
     void mk1_exactlyOneGate_sinkExcessPreferred() {
         // Two genuinely tied optima exist: {sink heavy naquadah} and {source light naquadah}.
         // The 1025/1024 source/sink weights must make the deterministic default the SINK
-        // (discard excess beats supplying an intermediate). Optima enumeration must find exactly
-        // these two.
+        // (discard excess beats supplying an intermediate).
         final LoadedChart chart = GtnhFlowLoader.load("mk1");
         final Result result = AutoBalancer.solve(chart.graph());
         assertTrue(result.isSuccess(), () -> "solve failed: " + result.failure());
@@ -100,9 +99,6 @@ class GroundTruthTest {
                 .nodeId(),
             "sink sits on the DT's heavy naquadah output");
         assertEquals(0.25, sink.ratePerSecond(), EPS, "0.25/s heavy naquadah discarded");
-
-        final List<Set<PortRef>> alternatives = AutoBalancer.enumerateAlternatives(chart.graph(), Map.of());
-        assertEquals(2, alternatives.size(), "exactly two tied optima: sink heavy, source light");
     }
 
     @Test
@@ -182,15 +178,10 @@ class GroundTruthTest {
         // but it is almost certainly a missing edge, so the solver must say so in its notes.
         final LoadedChart chart = GtnhFlowLoader.load("mk1_tiberium");
         final Node fusion = chart.machine(0);
-        final List<UUID> fusionHeavyEdges = chart.graph()
-            .getEdges()
-            .stream()
-            .filter(e -> e.targetNodeId.equals(fusion.id) && e.targetInputIndex == 0)
-            .map(e -> e.id)
-            .toList();
-        assertEquals(1, fusionHeavyEdges.size(), "precondition: the loader wired DT heavy -> fusion");
-        chart.graph()
-            .removeEdge(fusionHeavyEdges.get(0));
+        assertEquals(
+            1,
+            GtnhFlowLoader.removeEdgesInto(chart, fusion, 0),
+            "precondition: the loader wired DT heavy -> fusion");
 
         final Solution s = solve(chart);
 
@@ -209,7 +200,7 @@ class GroundTruthTest {
         assertTrue(
             s.notes()
                 .stream()
-                .anyMatch(n -> n.contains("missing an edge")),
+                .anyMatch(n -> n.contains(AutoBalancer.MISSING_EDGE)),
             "the missing-edge diagnostic must fire, got notes: " + s.notes());
     }
 
@@ -224,12 +215,8 @@ class GroundTruthTest {
         GtnhFlowLoader.clearTargetPins(chart);
         final Result result = AutoBalancer.solve(chart.graph());
 
-        assertTrue(!result.isSuccess(), "unpinned chart must not be balanced");
+        assertFalse(result.isSuccess(), "unpinned chart must not be balanced");
         assertEquals(AutoBalancer.NO_PIN, result.failure());
-        assertTrue(
-            AutoBalancer.enumerateAlternatives(chart.graph(), Map.of())
-                .isEmpty(),
-            "no alternatives either");
     }
 
     @Test
@@ -244,25 +231,22 @@ class GroundTruthTest {
             assertTrue(
                 s.notes()
                     .stream()
-                    .noneMatch(n -> n.contains("missing an edge")),
+                    .noneMatch(n -> n.contains(AutoBalancer.MISSING_EDGE)),
                 name + " should have no wiring notes, got: " + s.notes());
         }
     }
 
     @Test
     void palladiumLine_atMostElevenGates_allMachinesRun_withinBudget() {
-        // 56 machines. All must run (stage 0 floors). A reference HiGHS solve gave 11 gated
-        // externals, matching a historical hand-picked whitelist - but gate counts on
-        // floored charts are floor-sensitive and were certified only to
-        // +-1. The hard requirements: a validated solution, every machine running, no MORE
-        // externals than the historical whitelist, and inside the interactive budget. (The
-        // current deletion-filter answer is 9 gates, strictly better than the whitelist.)
+        // 56 machines. All must run (stage 0 floors). Gate counts on floored charts are
+        // floor-sensitive, so the bound is 11, not an exact count. Hard requirements: a
+        // validated solution, every machine running, inside the interactive budget.
         final LoadedChart chart = GtnhFlowLoader.load("palladium_line");
         final Solution s = solve(chart);
 
         assertAllMachinesRun(chart, s);
         assertTrue(s.openGates() > 0, "palladium line cannot balance gate-free");
-        assertTrue(s.openGates() <= 11, "at most the historical whitelist's 11 externals, got " + s.openGates());
+        assertTrue(s.openGates() <= 11, "at most 11 externals, got " + s.openGates());
         assertTrue(s.wallMillis() < 60_000, "total wall " + s.wallMillis() + "ms");
     }
 
@@ -280,7 +264,7 @@ class GroundTruthTest {
     @Test
     void mk1_reproducesTheHandDerivedRatios() {
         // Every number here is derived from mk1.yaml by hand at its target of 10 naquadah fuel
-        // mk1/s, and matches the worked example in the design notes. The fusion reactor makes 100
+        // mk1/s. The fusion reactor makes 100
         // per 0.25s craft, so 10/s is 0.1 crafts/s; that draws 30x0.1 = 3/s heavy and 65x0.1 =
         // 6.5/s light. The tower makes 10 light per 1s craft, so it runs at 0.65 crafts/s, which
         // also makes 5x0.65 = 3.25/s heavy - 0.25/s more than the reactor can take.
@@ -515,12 +499,7 @@ class GroundTruthTest {
         for (final Pin pin : chart.pins()) {
             if (!"target".equals(pin.kind())) continue;
             final Node node = chart.machine(pin.machineIndex());
-            for (int i = 0; i < node.outputs.size(); i++) {
-                if (TestIngredients.nameOf(node.outputs.get(i))
-                    .equals(pin.ingredient())) {
-                    pins.put(node.id, pin.value() / TestIngredients.quantityOf(node.outputs.get(i)));
-                }
-            }
+            pins.put(node.id, pin.value() / TestIngredients.quantityOf(node.outputs.get(pin.outputIndex())));
         }
         return pins;
     }

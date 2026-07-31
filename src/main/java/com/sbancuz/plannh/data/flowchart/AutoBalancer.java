@@ -1,7 +1,6 @@
 package com.sbancuz.plannh.data.flowchart;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -66,14 +65,8 @@ public final class AutoBalancer {
     /**
      * Budget for the exact stage-1 MILP once the LP deletion filter has already produced a
      * minimal support. Big-M count minimization gives branch-and-bound no usable root bound, so
-     * on large charts ojAlgo cannot prove optimality in any budget - the filter's answer is used
-     * and marked uncertified instead of burning the full stage budget.
-     *
-     * <p>
-     * The number is small because the search is all-or-nothing: across the corpus every proof
-     * that lands does so within 150ms, and the charts that time out still time out at 5s. Paying
-     * more only lengthens the freeze - 5s cost palladium_line 14.0s per solve against 1.2s here,
-     * for identical gate counts, external quantities and machine counts.
+     * large charts cannot be certified in any budget - proofs that land do so within 150ms,
+     * anything longer only lengthens the freeze for the same answer.
      */
     private static final long MILP_CERT_BUDGET_MILLIS = 500;
     /** Flows below this count as zero when deriving gate support. */
@@ -92,7 +85,6 @@ public final class AutoBalancer {
     private static final double SNK_WEIGHT = 1024.0;
     private static final double SRC_WEIGHT = 1025.0;
     private static final int TICKS_PER_SECOND = 20;
-    private static final int MAX_ENUMERATED_ALTERNATIVES = 10;
     private static final int MAX_TIED_SUPPORTS = 5;
 
     private AutoBalancer() {}
@@ -103,6 +95,9 @@ public final class AutoBalancer {
      * freely, so any numbers would be an invented anchor the user never asked for.
      */
     public static final String NO_PIN = "nothing is pinned - fix a machine count to ask for a balance";
+
+    /** Suffix of every wiring-diagnostic note; tests key on it. */
+    public static final String MISSING_EDGE = "missing an edge?";
 
     /** A port on a specific machine. {@code input} distinguishes the two port lists. */
     public record PortRef(UUID nodeId, int portIndex, boolean input) {}
@@ -181,49 +176,6 @@ public final class AutoBalancer {
         return Result.ok(ctx.toSolution(attempt, floorsUsed, System.currentTimeMillis() - start));
     }
 
-    /**
-     * Enumerates gate supports tied with the optimum at raw gate COUNT (no-good cuts), so a
-     * GUI can ask the user once instead of guessing. Each entry is the set of ports
-     * whose externals carried flow; element 0 is the deterministic default {@link #solve} picks.
-     * Weighted tiebreaks (sink vs source) do not disqualify an alternative.
-     */
-    public static List<Set<PortRef>> enumerateAlternatives(final Graph graph, final Map<UUID, Double> extraExtentPins) {
-        final Ctx ctx = new Ctx(graph, extraExtentPins);
-        if (ctx.machines.isEmpty() || !ctx.anyPin) return List.of();
-
-        final Attempt base = runStages(ctx, null);
-        if (base.failure != null) return List.of();
-        final double[] floors = ctx.stageZeroFloors(base.extents);
-        final Attempt attempt = floors == null ? base : orElse(runStages(ctx, floors), base);
-
-        final List<Set<PortRef>> supports = new ArrayList<>();
-        supports.add(ctx.flowPortRefs(attempt.externals));
-        // Alternatives are only enumerable when the optimum was certified: on the filter path
-        // there is no optimality frontier to walk, and each cut solve would burn the MILP budget.
-        if (attempt.support.isEmpty() || !attempt.certified) return supports;
-
-        final int optimumCount = attempt.support.size();
-        final double[] activeFloors = floors != null && attempt != base ? floors : null;
-        final Set<Set<Integer>> seen = new HashSet<>();
-        seen.add(attempt.support);
-        final List<Set<Integer>> cuts = new ArrayList<>(seen);
-        while (supports.size() < MAX_ENUMERATED_ALTERNATIVES) {
-            final StageSolve s1 = solveStage1(ctx, activeFloors, cuts, null);
-            // A repeated flow support means the frontier is exhausted: the cuts forbid the seen
-            // BINARY vectors, so the solver can only reproduce a seen support by opening junk
-            // zero-flow gates - and a junk combination (k+1 gates) always costs more than any
-            // genuine k-gate support would, so genuine alternatives are found first.
-            if (s1 == null || s1.support.size() > optimumCount || !seen.add(s1.support)) break;
-            supports.add(ctx.flowPortRefs(s1.externals));
-            cuts.add(s1.support);
-        }
-        return supports;
-    }
-
-    private static Attempt orElse(final Attempt preferred, final Attempt fallback) {
-        return preferred.failure == null ? preferred : fallback;
-    }
-
     // ---------------------------------------------------------------------------------------
     // Stage pipeline
     // ---------------------------------------------------------------------------------------
@@ -248,7 +200,7 @@ public final class AutoBalancer {
         Set<Integer> s1Support = filterSupport;
         StageSolve s1Witness = filter;
         boolean certified = false;
-        final StageSolve milp = solveStage1(ctx, floors, List.of(), ctx.weightedCost(filterSupport));
+        final StageSolve milp = solveStage1(ctx, floors, ctx.weightedCost(filterSupport));
         if (milp != null && ctx.weightedCost(milp.support) <= ctx.weightedCost(filterSupport) + 0.5) {
             s1Support = milp.support;
             s1Witness = milp;
@@ -374,14 +326,13 @@ public final class AutoBalancer {
                         .input() ? SRC_WEIGHT : SNK_WEIGHT);
             }
         }
-        final Optimisation.Result result = minimise(h.model);
+        final Optimisation.Result result = h.model.minimise();
         if (!isUsable(result)) return null;
-        return StageSolve.from(ctx, h, result.getValue());
+        return StageSolve.from(ctx, h);
     }
 
     /** Stage 1 exact MILP: minimize weighted open-gate count under an upper-bound cut. */
-    private static StageSolve solveStage1(final Ctx ctx, final double[] floors, final List<Set<Integer>> cuts,
-        final Double upperBoundCost) {
+    private static StageSolve solveStage1(final Ctx ctx, final double[] floors, final Double upperBoundCost) {
         double bigM = DEFAULT_BIG_M;
         for (int growth = 0; growth <= MAX_M_GROWTHS; growth++) {
             final Handles h = ctx.buildModel(bigM, true, floors);
@@ -406,8 +357,7 @@ public final class AutoBalancer {
             for (final Variable ext : h.extVars) {
                 ext.weight(1e-9);
             }
-            addNoGoodCuts(h, cuts);
-            final Optimisation.Result result = minimise(h.model);
+            final Optimisation.Result result = h.model.minimise();
             if (!isUsable(result)) return null;
             if (pressesCap(h, bigM)) {
                 bigM *= 10;
@@ -417,7 +367,6 @@ public final class AutoBalancer {
             return StageSolve.from(
                 ctx,
                 h,
-                result.getValue(),
                 result.getState()
                     .isOptimal());
         }
@@ -434,9 +383,9 @@ public final class AutoBalancer {
                 h.extVars[p].upper(0);
             }
         }
-        final Optimisation.Result result = minimise(h.model);
+        final Optimisation.Result result = h.model.minimise();
         if (!isUsable(result)) return null;
-        return StageSolve.from(ctx, h, result.getValue());
+        return StageSolve.from(ctx, h);
     }
 
     /** Stage 2: minimize total external quantity, weighted gate count capped at stage 1. */
@@ -457,13 +406,13 @@ public final class AutoBalancer {
                 ext.weight(1.0);
             }
             addNoGoodCuts(h, cuts);
-            final Optimisation.Result result = minimise(h.model);
+            final Optimisation.Result result = h.model.minimise();
             if (!isUsable(result)) return null;
             if (pressesCap(h, bigM)) {
                 bigM *= 10;
                 continue;
             }
-            return StageSolve.from(ctx, h, result.getValue());
+            return StageSolve.from(ctx, h);
         }
         return null;
     }
@@ -490,9 +439,9 @@ public final class AutoBalancer {
         for (final Variable f : h.flowVars) {
             f.weight(1.0);
         }
-        final Optimisation.Result result = minimise(h.model);
+        final Optimisation.Result result = h.model.minimise();
         if (!isUsable(result)) return null;
-        return StageSolve.from(ctx, h, result.getValue());
+        return StageSolve.from(ctx, h);
     }
 
     private static void addNoGoodCuts(final Handles h, final List<Set<Integer>> cuts) {
@@ -504,19 +453,6 @@ public final class AutoBalancer {
             }
             e.lower(1.0 - cut.size());
         }
-    }
-
-    /**
-     * ojAlgo's branch-and-bound prints every integrality drift it sees ("Obviously infeasible
-     * value ...") straight to the static {@link BasicLogger#ERROR} - roughly 150 lines per solve
-     * on a medium chart. {@code Optimisation.Options.validate} does not gate it: NodeKey passes
-     * that flag as a literal true. Big-M drift is expected here and already handled by deriving
-     * the gate support from flows rather than from the binaries, so the stream is silenced for
-     * the duration of our own solves and restored afterwards - a global assignment would also
-     * swallow the errors of any other mod using ojAlgo, which is not relocated in this jar.
-     */
-    private static Optimisation.Result minimise(final ExpressionsBasedModel model) {
-        return model.minimise();
     }
 
     private static boolean isUsable(final Optimisation.Result result) {
@@ -810,21 +746,11 @@ public final class AutoBalancer {
         }
 
         /**
-         * Stage-0 pass-2 floors: null when every unpinned machine already runs; otherwise a
-         * uniform extent floor 1000x below the smallest observed running rate, so the floor can
-         * never bind above a plausible natural rate.
-         */
-        /**
-         * Stage 0 as a constraint rather than a retry: every machine wired to a pin has to run.
-         * The floor is a millionth of the largest pinned extent - small enough that it never
-         * competes with a machine's natural rate (which would conjure externals to absorb the
-         * excess), large enough that the solver cannot park a machine at zero and call the chart
-         * balanced.
-         *
-         * <p>
-         * Machines in a component with no pin are exempt: nothing anchors their scale, so forcing
-         * them to run would invent quantities the user never asked for. Returns null when nothing
-         * is pinned at all.
+         * Stage-0 pass-2 floors: null when every unpinned machine already runs; otherwise an
+         * extent floor 1000x below pass 1's smallest running rate, so it can never bind above a
+         * rate this chart already achieves. Machines in a component with no pin are exempt:
+         * nothing anchors their scale, so forcing them to run would invent quantities the user
+         * never asked for.
          */
         double[] stageZeroFloors(final double[] extents) {
             final int[] root = new int[machines.size()];
@@ -872,24 +798,6 @@ public final class AutoBalancer {
                 if (machines.get(m).pinnedExtent == null && extents[m] <= USE_EPS_DETECT) idle++;
             }
             return idle;
-        }
-
-        double[] floorsFrom(final double[] extents) {
-            boolean anyIdle = false;
-            double minRunning = Double.MAX_VALUE;
-            for (int m = 0; m < machines.size(); m++) {
-                if (machines.get(m).pinnedExtent != null) continue;
-                if (extents[m] <= USE_EPS_DETECT) {
-                    anyIdle = true;
-                } else {
-                    minRunning = Math.min(minRunning, extents[m]);
-                }
-            }
-            if (!anyIdle) return null;
-            final double floor = (minRunning == Double.MAX_VALUE ? USE_EPS : minRunning) * 1e-3;
-            final double[] floors = new double[machines.size()];
-            Arrays.fill(floors, floor);
-            return floors;
         }
 
         /** Weighted stage-1 cost of a gate support (sources 1025, sinks 1024). */
@@ -943,18 +851,6 @@ public final class AutoBalancer {
                 if (gateFlow[g] > tol) support.add(g);
             }
             return support;
-        }
-
-        /** Ports whose externals carried flow, as public refs (for enumeration display). */
-        Set<PortRef> flowPortRefs(final double[] externals) {
-            final double tol = zeroTolerance(externals);
-            final Set<PortRef> refs = new HashSet<>();
-            for (int p = 0; p < externals.length; p++) {
-                if (externals[p] <= tol) continue;
-                final ConnectedPort port = connectedPorts.get(p);
-                refs.add(new PortRef(machines.get(port.machine()).node.id, port.portIndex(), port.input()));
-            }
-            return refs;
         }
 
         /** Independent conservation check: every port row must hold to VALIDATE_TOL. */
@@ -1070,7 +966,8 @@ public final class AutoBalancer {
                             + portNameOf(in)
                             + " externally, but the chart also produces it at '"
                             + match
-                            + "' - missing an edge?");
+                            + "' - "
+                            + MISSING_EDGE);
                 }
             }
             for (int p = 0; p < connectedPorts.size(); p++) {
@@ -1087,7 +984,8 @@ public final class AutoBalancer {
                             + portNameOf(src)
                             + " externally, but an unlinked part of the chart produces it at '"
                             + match
-                            + "' - missing an edge?");
+                            + "' - "
+                            + MISSING_EDGE);
                 }
             }
             return result;
@@ -1193,11 +1091,11 @@ public final class AutoBalancer {
             this.internalFlow = flowSum;
         }
 
-        static StageSolve from(final Ctx ctx, final Handles h, final double objective) {
-            return from(ctx, h, objective, true);
+        static StageSolve from(final Ctx ctx, final Handles h) {
+            return from(ctx, h, true);
         }
 
-        static StageSolve from(final Ctx ctx, final Handles h, final double objective, final boolean provenOptimal) {
+        static StageSolve from(final Ctx ctx, final Handles h, final boolean provenOptimal) {
             return new StageSolve(
                 ctx,
                 values(h.extentVars()),
@@ -1257,12 +1155,6 @@ public final class AutoBalancer {
 
         static Attempt failed(final String reason) {
             return new Attempt(null, Set.of(), false, List.of(), reason);
-        }
-
-        Attempt plusNote(final String note) {
-            final List<String> merged = new ArrayList<>(notes);
-            merged.add(note);
-            return new Attempt(extents, flows, externals, support, certified, List.copyOf(merged), failure);
         }
     }
 }

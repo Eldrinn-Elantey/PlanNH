@@ -128,10 +128,8 @@ public class FlowchartScreen extends ModularScreen {
         // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
         // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
         final Menu<?> targetEditor = new Menu<>();
-        // The field re-reads its bound value only while unfocused, and auto-focus lands on the
-        // same tick the editor opens - without the re-read in onFocus it would still show the
-        // previously edited port's rate. The cursor parks at the end: typing appends, backspace
-        // edits the old value.
+        // Re-read in onFocus: the field only refreshes its bound value while unfocused, so it
+        // would otherwise show the previously edited port's rate.
         final DoubleValue.Dynamic targetValue = new DoubleValue.Dynamic(
             canvas::editedTargetRate,
             canvas::setEditedTargetRate);
@@ -140,17 +138,15 @@ public class FlowchartScreen extends ModularScreen {
             @Override
             public void onFocus(final ModularGuiContext context) {
                 super.onFocus(context);
-                // trimmed: String.valueOf(double) renders 0 as "0.0" and 26 as "26.0", and the
-                // first thing anyone does with "0.0" is backspace it three times.
+                // trimmed: String.valueOf(double) renders 26 as "26.0"
                 setText(GuiHelper.trimTrailingZeros(targetValue.getStringValue()));
                 handler.setCursor(0, getText().length(), true, false);
             }
         }.numbersDouble(0, 1_000_000)
             .value(targetValue)
             .size(70, 14);
-        // Auto-focus from the field's own update listener: it runs even while the menu is
-        // disabled, but only on a widget that is in the tree - focusing from anywhere else
-        // raced widget validity and crashed the tick handler.
+        // Focus from the field's own update listener: the only place the widget is guaranteed
+        // to be in the tree.
         targetField.onUpdateListener(w -> {
             if (w.isValid() && canvas.consumeTargetEditorFocus()) {
                 w.getContext()
@@ -256,11 +252,8 @@ public class FlowchartScreen extends ModularScreen {
                             new ButtonWidget<>().overlay(IKey.str("Ops"))
                                 .onMousePressed(_ -> {
                                     final Graph g = canvas.getGraph();
-                                    // AUTO reports exact per-second rates and ignores opsMode, but
-                                    // the summary would still rescale to per-cycle totals, netting
-                                    // recycled ingredients into phantom lines.
-                                    if (g.getBalanceMode() == BalanceMode.OUTPUT
-                                        || g.getBalanceMode() == BalanceMode.INPUT) {
+                                    if (g.getBalanceMode()
+                                        .usesOpsMode()) {
                                         g.setOpsMode(!g.isOpsMode());
                                         PlanAPI.save();
                                     }
@@ -362,45 +355,6 @@ public class FlowchartScreen extends ModularScreen {
     // ── Slot bar helpers ──
 
     private static void shiftSlot(final CanvasWidget canvas, final int dir) {
-        // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
-        // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
-        final Menu<?> targetEditor = new Menu<>();
-        // The field re-reads its bound value only while unfocused, and auto-focus lands on the
-        // same tick the editor opens - without the re-read in onFocus it would still show the
-        // previously edited port's rate. The cursor parks at the end: typing appends, backspace
-        // edits the old value.
-        final DoubleValue.Dynamic targetValue = new DoubleValue.Dynamic(
-            canvas::editedTargetRate,
-            canvas::setEditedTargetRate);
-        final TextFieldWidget targetField = new TextFieldWidget() {
-
-            @Override
-            public void onFocus(final ModularGuiContext context) {
-                super.onFocus(context);
-                // trimmed: String.valueOf(double) renders 0 as "0.0" and 26 as "26.0", and the
-                // first thing anyone does with "0.0" is backspace it three times.
-                setText(GuiHelper.trimTrailingZeros(targetValue.getStringValue()));
-                handler.setCursor(0, getText().length(), true, false);
-            }
-        }.numbersDouble(0, 1_000_000)
-            .value(targetValue)
-            .size(70, 14);
-        // Auto-focus from the field's own update listener: it runs even while the menu is
-        // disabled, but only on a widget that is in the tree - focusing from anywhere else
-        // raced widget validity and crashed the tick handler.
-        targetField.onUpdateListener(w -> {
-            if (w.isValid() && canvas.consumeTargetEditorFocus()) {
-                w.getContext()
-                    .focus(w);
-            }
-        }, true);
-        targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
-            .coverChildren()
-            .background()
-            .relativeToScreen()
-            .child(targetField);
-        canvas.setTargetEditorMenu(targetEditor);
-
         final SlotSet set = PlanAPI.getSlotSet();
         if (set.slots.size() <= 1) return;
         set.activeSlot = (set.activeSlot + dir + set.slots.size()) % set.slots.size();
@@ -409,45 +363,6 @@ public class FlowchartScreen extends ModularScreen {
     }
 
     private static void addSlot(final CanvasWidget canvas) {
-        // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
-        // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
-        final Menu<?> targetEditor = new Menu<>();
-        // The field re-reads its bound value only while unfocused, and auto-focus lands on the
-        // same tick the editor opens - without the re-read in onFocus it would still show the
-        // previously edited port's rate. The cursor parks at the end: typing appends, backspace
-        // edits the old value.
-        final DoubleValue.Dynamic targetValue = new DoubleValue.Dynamic(
-            canvas::editedTargetRate,
-            canvas::setEditedTargetRate);
-        final TextFieldWidget targetField = new TextFieldWidget() {
-
-            @Override
-            public void onFocus(final ModularGuiContext context) {
-                super.onFocus(context);
-                // trimmed: String.valueOf(double) renders 0 as "0.0" and 26 as "26.0", and the
-                // first thing anyone does with "0.0" is backspace it three times.
-                setText(GuiHelper.trimTrailingZeros(targetValue.getStringValue()));
-                handler.setCursor(0, getText().length(), true, false);
-            }
-        }.numbersDouble(0, 1_000_000)
-            .value(targetValue)
-            .size(70, 14);
-        // Auto-focus from the field's own update listener: it runs even while the menu is
-        // disabled, but only on a widget that is in the tree - focusing from anywhere else
-        // raced widget validity and crashed the tick handler.
-        targetField.onUpdateListener(w -> {
-            if (w.isValid() && canvas.consumeTargetEditorFocus()) {
-                w.getContext()
-                    .focus(w);
-            }
-        }, true);
-        targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
-            .coverChildren()
-            .background()
-            .relativeToScreen()
-            .child(targetField);
-        canvas.setTargetEditorMenu(targetEditor);
-
         final SlotSet set = PlanAPI.getSlotSet();
         final int n = set.slots.size() + 1;
         final SlotSet.Slot slot = new SlotSet.Slot("Slot " + n, new Graph());
@@ -458,45 +373,6 @@ public class FlowchartScreen extends ModularScreen {
     }
 
     private static void deleteSlot(final CanvasWidget canvas) {
-        // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
-        // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
-        final Menu<?> targetEditor = new Menu<>();
-        // The field re-reads its bound value only while unfocused, and auto-focus lands on the
-        // same tick the editor opens - without the re-read in onFocus it would still show the
-        // previously edited port's rate. The cursor parks at the end: typing appends, backspace
-        // edits the old value.
-        final DoubleValue.Dynamic targetValue = new DoubleValue.Dynamic(
-            canvas::editedTargetRate,
-            canvas::setEditedTargetRate);
-        final TextFieldWidget targetField = new TextFieldWidget() {
-
-            @Override
-            public void onFocus(final ModularGuiContext context) {
-                super.onFocus(context);
-                // trimmed: String.valueOf(double) renders 0 as "0.0" and 26 as "26.0", and the
-                // first thing anyone does with "0.0" is backspace it three times.
-                setText(GuiHelper.trimTrailingZeros(targetValue.getStringValue()));
-                handler.setCursor(0, getText().length(), true, false);
-            }
-        }.numbersDouble(0, 1_000_000)
-            .value(targetValue)
-            .size(70, 14);
-        // Auto-focus from the field's own update listener: it runs even while the menu is
-        // disabled, but only on a widget that is in the tree - focusing from anywhere else
-        // raced widget validity and crashed the tick handler.
-        targetField.onUpdateListener(w -> {
-            if (w.isValid() && canvas.consumeTargetEditorFocus()) {
-                w.getContext()
-                    .focus(w);
-            }
-        }, true);
-        targetEditor.setEnabledIf(_ -> canvas.isTargetEditorOpen())
-            .coverChildren()
-            .background()
-            .relativeToScreen()
-            .child(targetField);
-        canvas.setTargetEditorMenu(targetEditor);
-
         final SlotSet set = PlanAPI.getSlotSet();
         if (set.slots.size() <= 1) return;
         set.slots.remove(set.activeSlot);
@@ -636,8 +512,9 @@ public class FlowchartScreen extends ModularScreen {
             final List<Summary.Line<?>> kept = new ArrayList<>();
             for (final var item : items) {
                 final float shown = isCycle ? item.amount() : item.amount() / cycleSecs;
+                // "Displays as zero" is the formatter's own call, whatever shape its output takes.
                 if (!item.displayAmount(shown)
-                    .matches("0([.,]0+)?\\p{Alpha}*")) {
+                    .equals(item.displayAmount(0f))) {
                     kept.add(item);
                 }
             }
