@@ -900,6 +900,10 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
     @Override
     @Nullable
     public ItemStack getStackForRecipeViewer() {
+        // NEI asks via GuiContainerManager.getStackMouseOver, which AE2 also fires from
+        // lastKeyTyped - AFTER the key was handled. Closing the screen with E disposes this
+        // widget inside that same key event, so the query can arrive on a dead widget.
+        if (!isValid()) return null;
         final IngredientHit hit = ingredientUnderMouse();
         if (hit == null) return null;
         canvas.setPendingLookup(hit.origin());
@@ -908,6 +912,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
 
     @Nullable
     public ItemStack stackUnderMouse() {
+        if (!isValid()) return null;
         final IngredientHit hit = ingredientUnderMouse();
         return hit == null ? null : hit.stack();
     }

@@ -140,7 +140,9 @@ public class FlowchartScreen extends ModularScreen {
             @Override
             public void onFocus(final ModularGuiContext context) {
                 super.onFocus(context);
-                setText(targetValue.getStringValue());
+                // trimmed: String.valueOf(double) renders 0 as "0.0" and 26 as "26.0", and the
+                // first thing anyone does with "0.0" is backspace it three times.
+                setText(GuiHelper.trimTrailingZeros(targetValue.getStringValue()));
                 handler.setCursor(0, getText().length(), true, false);
             }
         }.numbersDouble(0, 1_000_000)
@@ -375,7 +377,9 @@ public class FlowchartScreen extends ModularScreen {
             @Override
             public void onFocus(final ModularGuiContext context) {
                 super.onFocus(context);
-                setText(targetValue.getStringValue());
+                // trimmed: String.valueOf(double) renders 0 as "0.0" and 26 as "26.0", and the
+                // first thing anyone does with "0.0" is backspace it three times.
+                setText(GuiHelper.trimTrailingZeros(targetValue.getStringValue()));
                 handler.setCursor(0, getText().length(), true, false);
             }
         }.numbersDouble(0, 1_000_000)
@@ -420,7 +424,9 @@ public class FlowchartScreen extends ModularScreen {
             @Override
             public void onFocus(final ModularGuiContext context) {
                 super.onFocus(context);
-                setText(targetValue.getStringValue());
+                // trimmed: String.valueOf(double) renders 0 as "0.0" and 26 as "26.0", and the
+                // first thing anyone does with "0.0" is backspace it three times.
+                setText(GuiHelper.trimTrailingZeros(targetValue.getStringValue()));
                 handler.setCursor(0, getText().length(), true, false);
             }
         }.numbersDouble(0, 1_000_000)
@@ -467,7 +473,9 @@ public class FlowchartScreen extends ModularScreen {
             @Override
             public void onFocus(final ModularGuiContext context) {
                 super.onFocus(context);
-                setText(targetValue.getStringValue());
+                // trimmed: String.valueOf(double) renders 0 as "0.0" and 26 as "26.0", and the
+                // first thing anyone does with "0.0" is backspace it three times.
+                setText(GuiHelper.trimTrailingZeros(targetValue.getStringValue()));
                 handler.setCursor(0, getText().length(), true, false);
             }
         }.numbersDouble(0, 1_000_000)

@@ -40,7 +40,8 @@ public final class GuiHelper {
      * trickle rates that fewer digits would round to an all-zero line.
      */
     public static String formatRate(final float rate) {
-        if (rate >= 1000000000f) return String.format("%.1fB", rate / 1000000000f);
+        // G, not B: fluid amounts already use B for buckets, and that is how players read it.
+        if (rate >= 1000000000f) return String.format("%.1fG", rate / 1000000000f);
         if (rate >= 1000000f) return String.format("%.1fM", rate / 1000000f);
         if (rate >= 1000f) return String.format("%.0f", rate);
         if (rate >= 1f) return String.format("%.2f", rate);

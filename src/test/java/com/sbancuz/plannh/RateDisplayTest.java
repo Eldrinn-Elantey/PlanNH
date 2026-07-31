@@ -44,4 +44,11 @@ class RateDisplayTest {
         assertEquals("25.00", GuiHelper.formatRate(25f));
         assertEquals("1200", GuiHelper.formatRate(1200f));
     }
+
+    @Test
+    void bigRatesUseGigaNotBuckets() {
+        // B is what fluid amounts use for buckets; a 1.5e9/s rate must not read as 1.5 buckets.
+        assertEquals("1.5G", GuiHelper.formatRate(1.5e9f));
+        assertEquals("2.0M", GuiHelper.formatRate(2e6f));
+    }
 }
