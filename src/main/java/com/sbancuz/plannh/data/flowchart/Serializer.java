@@ -19,6 +19,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
@@ -132,10 +133,20 @@ public final class Serializer {
             final JsonObject obj = elem.getAsJsonObject();
             final String name = obj.get("name")
                 .getAsString();
-            final String data = obj.get("data")
-                .getAsString();
-            final Graph graph = decode(data);
-            set.slots.add(new SlotSet.Slot(name, graph));
+            // Per slot: one chart that cannot be read costs the player that chart, not the whole
+            // save. An empty graph keeps the slot (and its name) in place rather than silently
+            // renumbering everything after it.
+            try {
+                set.slots.add(
+                    new SlotSet.Slot(
+                        name,
+                        decode(
+                            obj.get("data")
+                                .getAsString())));
+            } catch (final RuntimeException e) {
+                PlanNH.LOG.error("Slot '{}' could not be read and was left empty", name, e);
+                set.slots.add(new SlotSet.Slot(name, new Graph()));
+            }
         }
         return set;
     }
