@@ -275,13 +275,15 @@ public class GTProvider implements PropertyProvider {
         node.inputs.clear();
         node.outputs.clear();
 
-        // GT recipe arrays may contain null slots (e.g. gap outputs); skip them.
+        // GT recipe arrays may contain null slots (e.g. gap outputs); skip them. Stacks are
+        // copied because Port.merge mutates amounts in place - wrapping the live recipe stacks
+        // corrupts the shared GT recipe on every extraction.
         for (int i = 0; i < r.mInputs.length; i++) {
             if (r.mInputs[i] == null || r.mInputs[i].stackSize <= 0) continue;
             node.inputs.add(
                 new Port<>(
                     RecipePropertyAPI.ITEM,
-                    r.mInputs[i],
+                    r.mInputs[i].copy(),
                     r.mInputChances != null ? r.mInputChances[i] / 10000.0f : 1.f));
         }
         for (int i = 0; i < r.mOutputs.length; i++) {
@@ -289,7 +291,7 @@ public class GTProvider implements PropertyProvider {
             node.outputs.add(
                 new Port<>(
                     RecipePropertyAPI.ITEM,
-                    r.mOutputs[i],
+                    r.mOutputs[i].copy(),
                     r.mOutputChances != null ? r.mOutputChances[i] / 10000.0f : 1.f));
         }
         for (int i = 0; i < r.mFluidInputs.length; i++) {
@@ -297,7 +299,7 @@ public class GTProvider implements PropertyProvider {
             node.inputs.add(
                 new Port<>(
                     RecipePropertyAPI.FLUID,
-                    r.mFluidInputs[i],
+                    r.mFluidInputs[i].copy(),
                     r.mFluidInputChances != null ? r.mFluidInputChances[i] / 10000.0f : 1.f));
         }
         for (int i = 0; i < r.mFluidOutputs.length; i++) {
@@ -305,7 +307,7 @@ public class GTProvider implements PropertyProvider {
             node.outputs.add(
                 new Port<>(
                     RecipePropertyAPI.FLUID,
-                    r.mFluidOutputs[i],
+                    r.mFluidOutputs[i].copy(),
                     r.mFluidOutputChances != null ? r.mFluidOutputChances[i] / 10000.0f : 1.f));
         }
 

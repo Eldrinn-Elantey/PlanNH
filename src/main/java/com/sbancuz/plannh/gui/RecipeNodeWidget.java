@@ -528,7 +528,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         final float total = effectiveTotal(nb, index, output, port.getAmount());
         String label = GuiHelper.formatRate(total / sec) + "/s " + port.getDisplayName();
         if (output && port.getChance() < 0.999f) {
-            label += " (" + Math.round(port.getChance() * 100) + "%)";
+            label += " (" + Math.round(port.getAmount() * port.getChance() * 100) + "%)";
         }
         return label;
     }
