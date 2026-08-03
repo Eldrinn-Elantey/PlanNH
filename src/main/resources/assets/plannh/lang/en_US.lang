@@ -31,9 +31,8 @@ plannh.settings.heat_discount=Heat Disc.
 plannh.settings.laser_oc=Laser OC
 plannh.settings.unlimited_skips=Unl. Skips
 plannh.settings.no_overclock=No OC
-plannh.settings.catalyst=Catalyst
-plannh.settings.catalyst.astral_arrays=Astral Arrays
-plannh.settings.catalyst.accel_card=Accel. Card
+plannh.settings.catalyst_astral_arrays=Astral Arrays
+plannh.settings.catalyst_accel_card=Accel. Card
 
 ## Settings - Botania
 plannh.settings.mana_per_tick=Mana/t

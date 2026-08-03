@@ -158,9 +158,8 @@ public class GTProvider implements PropertyProvider {
             Settings.HEAT_DISCOUNT_MULT.def()
                 .withVisibility(multiblockOnly().and((ctx, s) -> hasHeat(ctx))))
         .setting(
-            Settings.CATALYST.def()
-                .withVisibility((ctx, s) -> isEoH(ctx))
-                .withCustomLabel((ctx, s) -> isEoH(ctx) ? "catalyst.astral_arrays" : Settings.CATALYST.key()))
+            Settings.CATALYST_ASTRAL_ARRAYS.def()
+                .withVisibility((ctx, s) -> isEoH(ctx)))
 
         .effect(
             Effects.durationFromHandler()
@@ -174,7 +173,7 @@ public class GTProvider implements PropertyProvider {
                         .route(
                             "gt.recipe.eyeofharmony",
                             step -> step.withCatalyst(
-                                (SettingDef<Integer>) Settings.CATALYST.def(),
+                                (SettingDef<Integer>) Settings.CATALYST_ASTRAL_ARRAYS.def(),
                                 v -> (int) Math
                                     .pow(2, (int) Math.floor(Math.log(8.0 * Math.min(v, 8637)) / Math.log(1.7)))))
                         // Perfect OC defaults

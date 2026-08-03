@@ -13,6 +13,7 @@ import net.minecraft.util.StatCollector;
 public class SettingDef<T> {
 
     public final String key;
+    public final String label;
     public final Class<T> type;
     public final T defaultValue;
     public final int minInt;
@@ -22,34 +23,12 @@ public class SettingDef<T> {
     @Nullable
     private final BiFunction<T, MachineConfig, String> badgeFn;
     private final BiPredicate<RecipeContext, Map<String, Object>> visibility;
-    private final BiFunction<RecipeContext, Map<String, Object>, String> labelFn;
-
-    private SettingDef(final String key, final Class<T> type, final T defaultValue, final int minInt, final int maxInt,
-        @Nullable final List<String> options, @Nullable final BiFunction<T, MachineConfig, String> badgeFn) {
-        this(key, type, defaultValue, minInt, maxInt, options, badgeFn, (ctx, s) -> true);
-    }
 
     private SettingDef(final String key, final Class<T> type, final T defaultValue, final int minInt, final int maxInt,
         @Nullable final List<String> options, @Nullable final BiFunction<T, MachineConfig, String> badgeFn,
         final BiPredicate<RecipeContext, Map<String, Object>> visibility) {
-        this(
-            key,
-            type,
-            defaultValue,
-            minInt,
-            maxInt,
-            options,
-            badgeFn,
-            visibility,
-            (ctx, s) -> StatCollector.translateToLocal("plannh.settings." + key));
-    }
-
-    private SettingDef(final String key, final Class<T> type, final T defaultValue, final int minInt, final int maxInt,
-        @Nullable final List<String> options, @Nullable final BiFunction<T, MachineConfig, String> badgeFn,
-        final BiPredicate<RecipeContext, Map<String, Object>> visibility,
-        final BiFunction<RecipeContext, Map<String, Object>, String> labelFn) {
         this.key = key;
-        this.labelFn = labelFn;
+        this.label = StatCollector.translateToLocal("plannh.settings." + key);
         this.type = type;
         this.defaultValue = defaultValue;
         this.minInt = minInt;
@@ -67,19 +46,19 @@ public class SettingDef<T> {
     @Nonnull
     public static SettingDef<Integer> intDef(final String key, final int def, final int min, final int max,
         @Nullable final BiFunction<Integer, MachineConfig, String> badgeFn) {
-        return new SettingDef<>(key, Integer.class, def, min, max, null, badgeFn);
+        return new SettingDef<>(key, Integer.class, def, min, max, null, badgeFn, (ctx, s) -> true);
     }
 
     @Nonnull
     public static SettingDef<Boolean> boolDef(final String key, final boolean def,
         final BiFunction<Boolean, MachineConfig, String> badgeFn) {
-        return new SettingDef<>(key, Boolean.class, def, 0, 0, null, badgeFn);
+        return new SettingDef<>(key, Boolean.class, def, 0, 0, null, badgeFn, (ctx, s) -> true);
     }
 
     @Nonnull
     public static SettingDef<String> enumDef(final String key, final String def, final List<String> options,
         final BiFunction<String, MachineConfig, String> badgeFn) {
-        return new SettingDef<>(key, String.class, def, 0, 0, options, badgeFn);
+        return new SettingDef<>(key, String.class, def, 0, 0, options, badgeFn, (ctx, s) -> true);
     }
 
     public boolean hasOptions() {
@@ -93,28 +72,11 @@ public class SettingDef<T> {
         return badgeFn.apply((T) val, config);
     }
 
-    public String label(final RecipeContext ctx, final Map<String, Object> settings) {
-        return labelFn.apply(ctx, settings);
-    }
-
     public boolean isVisible(final RecipeContext ctx, final Map<String, Object> settings) {
         return visibility.test(ctx, settings);
     }
 
     public SettingDef<T> withVisibility(final BiPredicate<RecipeContext, Map<String, Object>> condition) {
         return new SettingDef<>(key, type, defaultValue, minInt, maxInt, options, badgeFn, condition);
-    }
-
-    public SettingDef<T> withCustomLabel(final BiFunction<RecipeContext, Map<String, Object>, String> labelFn) {
-        return new SettingDef<>(
-            this.key,
-            type,
-            defaultValue,
-            minInt,
-            maxInt,
-            options,
-            badgeFn,
-            visibility,
-            (ctx, s) -> StatCollector.translateToLocal("plannh.settings." + labelFn.apply(ctx, s)));
     }
 }

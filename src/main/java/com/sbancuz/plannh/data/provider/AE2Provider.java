@@ -66,16 +66,14 @@ public final class AE2Provider implements PropertyProvider {
             MachineProfile.builder("ae2:inscriber", "Inscriber")
                 .setting(Settings.MACHINES.def())
                 .setting(Settings.TICK_MODIFIER.def())
-                .setting(
-                    Settings.CATALYST.def()
-                        .withCustomLabel((ctx, s) -> "catalyst.accel_card"))
+                .setting(Settings.CATALYST_ACCEL_CARD.def())
                 .effect(Effects.durationFromFormula((ctx, s) -> {
-                    final int cards = (int) s.getOrDefault(Settings.CATALYST.key(), 0);
+                    final int cards = (int) s.getOrDefault(Settings.CATALYST_ACCEL_CARD.key(), 0);
                     final int speedFactor = TileInscriber.BASE_SPEED + cards;
                     return Math.max(1, (TileInscriber.MAX_PROCESSING_TIME + speedFactor - 1) / speedFactor);
                 })
                     .withCostPerT(CoFHCompat.RF_PER_T, (current, s, ctx) -> {
-                        final int cards = (int) s.getOrDefault(Settings.CATALYST.key(), 0);
+                        final int cards = (int) s.getOrDefault(Settings.CATALYST_ACCEL_CARD.key(), 0);
                         final int speedFactor = TileInscriber.BASE_SPEED + cards;
                         return (long) TileInscriber.BASE_POWER_PER_TICK * speedFactor;
                     })
@@ -87,18 +85,17 @@ public final class AE2Provider implements PropertyProvider {
             MachineProfile.builder("ae2:molecular_assembler", "Molecular Assembler")
                 .setting(Settings.MACHINES.def())
                 .setting(Settings.TICK_MODIFIER.def())
-                .setting(
-                    Settings.CATALYST.def()
-                        .withCustomLabel((ctx, s) -> "catalyst.accel_card"))
+                .setting(Settings.CATALYST_ACCEL_CARD.def())
                 .effect(Effects.durationFromFormula((ctx, s) -> {
-                    final int cards = Math
-                        .min((int) s.getOrDefault(Settings.CATALYST.key(), 0), TileMolecularAssembler.SPEED.length - 1);
+                    final int cards = Math.min(
+                        (int) s.getOrDefault(Settings.CATALYST_ACCEL_CARD.key(), 0),
+                        TileMolecularAssembler.SPEED.length - 1);
                     final int speed = TileMolecularAssembler.SPEED[cards];
                     return Math.max(1, (TileMolecularAssembler.MAX_PROCESSING_TIME + speed - 1) / speed);
                 })
                     .andThen((current, s, ctx) -> {
                         final int cards = Math.min(
-                            (int) s.getOrDefault(Settings.CATALYST.key(), 0),
+                            (int) s.getOrDefault(Settings.CATALYST_ACCEL_CARD.key(), 0),
                             TileMolecularAssembler.SPEED.length - 1);
                         final int speed = TileMolecularAssembler.SPEED[cards];
                         final double tax = TileMolecularAssembler.ACCELERATION_TAX[cards];

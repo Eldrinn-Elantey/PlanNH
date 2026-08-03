@@ -648,7 +648,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
 
         final RecipeContext ctx = new RecipeContext(node.properties);
         for (final SettingDef<?> def : profile.visibleSettings(ctx, c.settings)) {
-            y = drawSetting(x, y, ctx, def, c);
+            y = drawSetting(x, y, def, c);
         }
 
         if (node.getAvailableExtractors()
@@ -663,23 +663,15 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
         }
     }
 
-    private int drawSetting(final int x, final int y, final RecipeContext ctx, final SettingDef<?> def,
-        final MachineConfig c) {
+    private int drawSetting(final int x, final int y, final SettingDef<?> def, final MachineConfig c) {
         if (def.type == Integer.class) {
-            return drawConfigIntField(
-                x,
-                y,
-                def.label(ctx, c.settings),
-                c.getInt(def.key),
-                def.minInt,
-                def.maxInt,
-                v -> {
-                    c.setInt(def.key, v);
-                    onConfigChanged();
-                });
+            return drawConfigIntField(x, y, def.label, c.getInt(def.key), def.minInt, def.maxInt, v -> {
+                c.setInt(def.key, v);
+                onConfigChanged();
+            });
         } else if (def.type == Boolean.class) {
             final boolean val = c.getBoolean(def.key);
-            final String label = (val ? "[\u2713] " : "[  ] ") + def.label(ctx, c.settings);
+            final String label = (val ? "[\u2713] " : "[  ] ") + def.label;
             GuiDraw.drawText(
                 label,
                 x,
@@ -694,13 +686,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget> implements Intera
             return y + LINE_H;
         } else if (def.type == String.class && def.hasOptions()) {
             final String val = c.getString(def.key);
-            GuiDraw.drawText(
-                def.label(ctx, c.settings) + " " + val,
-                x,
-                y,
-                1.0f,
-                PlannhColors.SETTING_ON.getColor(),
-                false);
+            GuiDraw.drawText(def.label + " " + val, x, y, 1.0f, PlannhColors.SETTING_ON.getColor(), false);
 
             final int decX = x + SETTING_DEC_X;
             final int incX = decX + SETTING_BTN_W;
