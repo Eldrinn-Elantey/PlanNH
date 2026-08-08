@@ -37,7 +37,12 @@ public final class PlannhColors {
         SECTION_INPUT     = C.argb("section_input",      "0x3250A050"),
         SECTION_FLUID_OUT = C.argb("section_fluid_out",  "0x323C8CB4"),
         SECTION_FLUID_IN  = C.argb("section_fluid_in",   "0x323C64B4"),
-        SECTION_OPS       = C.argb("section_ops",        "0x326478C8");
+        SECTION_OPS       = C.argb("section_ops",        "0x326478C8"),
+        CHIP_EXCESS_BG    = C.argb("chip_excess_bg",     "0xB4232328"),
+        CHIP_IMPORT_BG    = C.argb("chip_import_bg",     "0xC8503C1E"),
+        CHIP_TERMINAL_BG  = C.argb("chip_terminal_bg",   "0xB4232328"),
+        CHIP_BORDER       = C.argb("chip_border",        "0x64FFFFFF"),
+        SECTION_CHOICE    = C.argb("section_choice",     "0x3250A0A0");
 
     // ── Text Colors (opaque) ──
     public static final ColorResource

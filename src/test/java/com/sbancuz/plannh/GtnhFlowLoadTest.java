@@ -3,8 +3,15 @@ package com.sbancuz.plannh;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
 import org.junit.jupiter.api.Test;
 
+import com.sbancuz.plannh.data.flowchart.Edge;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 import com.sbancuz.plannh.harness.GtnhFlowLoader.LoadedChart;
@@ -121,19 +128,52 @@ class GtnhFlowLoadTest {
 
     @Test
     void everyChartHasEdges() {
+        // A spanning structure per island, not per chart: a fixture may be deliberately two
+        // unconnected sub-charts (two_decisions is), and "machines - 1" would call that a loader
+        // failure. Counting the islands keeps the check as strict as it was on every other chart.
         for (final String name : GtnhFlowLoader.CORPUS) {
             final LoadedChart chart = GtnhFlowLoader.load(name);
+            final int machines = chart.machines()
+                .size();
+            final int edges = chart.graph()
+                .getEdges()
+                .size();
+            final int islands = componentCount(chart);
             assertTrue(
-                chart.graph()
-                    .getEdges()
-                    .size()
-                    >= chart.machines()
-                        .size() - 1,
-                name + " should be connected-ish, got "
-                    + chart.graph()
-                        .getEdges()
-                        .size()
-                    + " edges");
+                edges >= machines - islands,
+                name + " should be wired up, got "
+                    + edges
+                    + " edges for "
+                    + machines
+                    + " machines in "
+                    + islands
+                    + " island(s)");
         }
+    }
+
+    /** Weakly-connected components of the loaded chart, by union-find over its edges. */
+    private static int componentCount(final LoadedChart chart) {
+        final Map<UUID, UUID> parent = new HashMap<>();
+        for (final Node machine : chart.machines()) {
+            parent.put(machine.id, machine.id);
+        }
+        for (final Edge edge : chart.graph()
+            .getEdges()) {
+            parent.put(find(parent, edge.sourceNodeId), find(parent, edge.targetNodeId));
+        }
+        final Set<UUID> roots = new HashSet<>();
+        for (final UUID id : parent.keySet()) {
+            roots.add(find(parent, id));
+        }
+        return roots.size();
+    }
+
+    private static UUID find(final Map<UUID, UUID> parent, final UUID id) {
+        UUID root = id;
+        while (!parent.get(root)
+            .equals(root)) {
+            root = parent.get(root);
+        }
+        return root;
     }
 }

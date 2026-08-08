@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -204,6 +205,23 @@ public final class Serializer {
             graph.getBalanceMode()
                 .name());
         root.addProperty("opsMode", graph.isOpsMode());
+        // The chosen answer travels as the ports it opens, never as gate indices: those are rebuilt
+        // from scratch on every solve and mean nothing across a save.
+        if (graph.getExcessChoice() != null) {
+            final JsonArray anchors = new JsonArray();
+            for (final AutoBalancer.PortRef ref : graph.getExcessChoice()
+                .gateAnchors()) {
+                final JsonObject a = new JsonObject();
+                a.addProperty(
+                    "node",
+                    ref.nodeId()
+                        .toString());
+                a.addProperty("port", ref.portIndex());
+                a.addProperty("input", ref.input());
+                anchors.add(a);
+            }
+            root.add("excessChoice", anchors);
+        }
         root.addProperty("zoom", graph.getZoom());
         root.addProperty("panX", graph.getPanX());
         root.addProperty("panY", graph.getPanY());
@@ -280,6 +298,26 @@ public final class Serializer {
             graph.setOpsMode(
                 root.get("opsMode")
                     .getAsBoolean());
+        }
+        // Read independently of everything else, like the per-node targets: an old save has no such
+        // key, and a corrupt one costs the user a preference rather than the chart.
+        if (root.has("excessChoice")) {
+            try {
+                final List<AutoBalancer.PortRef> anchors = new ArrayList<>();
+                for (final JsonElement elem : root.getAsJsonArray("excessChoice")) {
+                    final JsonObject a = elem.getAsJsonObject();
+                    anchors.add(
+                        new AutoBalancer.PortRef(
+                            UUID.fromString(
+                                a.get("node")
+                                    .getAsString()),
+                            a.get("port")
+                                .getAsInt(),
+                            a.get("input")
+                                .getAsBoolean()));
+                }
+                if (!anchors.isEmpty()) graph.setExcessChoice(AutoBalancer.ChoiceKey.of(anchors));
+            } catch (final RuntimeException ignored) {}
         }
         graph.setZoom(
             root.get("zoom")

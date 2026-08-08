@@ -36,6 +36,8 @@ import com.cleanroommc.modularui.widgets.menu.Menu;
 import com.cleanroommc.modularui.widgets.textfield.TextFieldWidget;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.api.PlanAPI;
+import com.sbancuz.plannh.data.flowchart.AutoBalancer;
+import com.sbancuz.plannh.data.flowchart.BalanceView;
 import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
 import com.sbancuz.plannh.data.flowchart.Balancer.NodeBalance;
@@ -458,6 +460,25 @@ public class FlowchartScreen extends ModularScreen {
             size(WIDTH, 200);
         }
 
+        /** Screen Y of each listed choice, filled during draw and read back on click. */
+        private final List<int[]> choiceRows = new ArrayList<>();
+        private int choicesHeaderY = -1;
+
+        private boolean choicesOffered(final BalanceResult br) {
+            return BalanceView.hasChoices(graph());
+        }
+
+        /** Rows plus one heading per decision, but no heading when there is only one question. */
+        private int choiceLineCount(final BalanceResult br) {
+            if (!choicesOffered(br)) return 0;
+            final BalanceView.Choices choices = BalanceView.choices(graph());
+            final int headings = choices.groups()
+                .size() > 1 ? choices.groups()
+                    .size() : 0;
+            return choices.rows()
+                .size() + headings;
+        }
+
         private int computeHeight(final Summary summary, final BalanceResult br) {
             if (collapsed) return TITLE_H;
             final Graph g = graph();
@@ -484,6 +505,9 @@ public class FlowchartScreen extends ModularScreen {
             }
             if (br.totalDurationTicks() > 0) {
                 h += SECTION_H;
+            }
+            if (choicesOffered(br)) {
+                h += SECTION_H + choiceLineCount(br) * LINE_H + SECTION_END_PAD;
             }
             if (!br.notes()
                 .isEmpty()) {
@@ -662,6 +686,8 @@ public class FlowchartScreen extends ModularScreen {
             GuiDraw.drawText(modeStr, MODE_TEXT_X, ly, 0.9f, PlannhColors.ACCENT_BLUE.getColor(), false);
             ly += MODE_LINE_H;
 
+            ly = drawChoices(ly, w, br);
+
             if (!br.notes()
                 .isEmpty()) {
                 GuiDraw.drawRect(
@@ -714,6 +740,69 @@ public class FlowchartScreen extends ModularScreen {
             GuiDraw.drawText("[+ in NEI GUI] add recipe", 6, ly, 0.8f, PlannhColors.TEXT_FAINT.getColor(), false);
         }
 
+        /**
+         * The answers this chart could equally well have had, and which one is on screen.
+         *
+         * <p>
+         * Shown because AUTO's job is a most reasonable DEFAULT: past the gate count every rule
+         * that picked this answer over the others is a preference somebody encoded - voiding is
+         * cheaper than importing, less material moved is better - and a preference the user cannot
+         * see is one they cannot disagree with. Collapsed until asked for, because finding the
+         * others costs a solve per candidate and drawing the chart must not.
+         */
+        private int drawChoices(int ly, final int w, final BalanceResult br) {
+            choiceRows.clear();
+            choicesHeaderY = -1;
+            if (!choicesOffered(br)) return ly;
+
+            final BalanceView.Choices alts = BalanceView.choices(graph());
+            choicesHeaderY = ly;
+            GuiDraw.drawRect(
+                SECTION_HEADER_X,
+                ly,
+                w - SECTION_HEADER_X * 2,
+                SECTION_H,
+                PlannhColors.SECTION_CHOICE.getColor());
+            GuiDraw.drawText(
+                "Choices (" + alts.rows()
+                    .size() + ")",
+                SECTION_HEADER_TEXT_X,
+                ly + SECTION_HEADER_TEXT_Y_OFF,
+                1.0f,
+                PlannhColors.ACCENT_CYAN2.getColor(),
+                false);
+            ly += SECTION_H;
+
+            // A heading per decision only when there is more than one: with a single question the
+            // heading would just repeat the row directly under it.
+            final boolean headings = alts.groups()
+                .size() > 1;
+            for (final BalanceView.Group group : alts.groups()) {
+                if (headings) {
+                    GuiDraw.drawText(
+                        group.heading() + ":",
+                        ITEM_TEXT_X,
+                        ly,
+                        NOTE_SCALE,
+                        PlannhColors.TEXT_MUTED.getColor(),
+                        false);
+                    ly += LINE_H;
+                }
+                for (final BalanceView.Choice row : group.rows()) {
+                    GuiDraw.drawText(
+                        (row.active() ? "> " : "  ") + (headings ? "  " : "") + row.label(),
+                        ITEM_TEXT_X,
+                        ly,
+                        NOTE_SCALE,
+                        row.active() ? PlannhColors.ACCENT_CYAN2.getColor() : PlannhColors.TEXT_MUTED.getColor(),
+                        false);
+                    choiceRows.add(new int[] { ly, ly + LINE_H });
+                    ly += LINE_H;
+                }
+            }
+            return ly + SECTION_END_PAD;
+        }
+
         private int drawSection(int ly, final int w, final String title, final List<Summary.Line<?>> items,
             final int headerColor, final int titleColor, final int itemColor, final float cycleSecs,
             final boolean isCycle) {
@@ -752,6 +841,22 @@ public class FlowchartScreen extends ModularScreen {
                 final BalanceResult br = g.balance();
                 size(WIDTH, computeHeight(displayedSummary(g.summary(), br), br));
                 return Result.SUCCESS;
+            }
+
+            final Graph g0 = graph();
+            final BalanceResult br0 = g0.balance();
+            if (choicesOffered(br0)) {
+                final List<BalanceView.Choice> options = BalanceView.choices(g0)
+                    .rows();
+                for (int i = 0; i < choiceRows.size() && i < options.size(); i++) {
+                    if (my < choiceRows.get(i)[0] || my >= choiceRows.get(i)[1]) continue;
+                    final AutoBalancer.ChoiceKey picked = options.get(i)
+                        .key();
+                    PlanAPI.recordEdit(g0, () -> g0.setExcessChoice(picked));
+                    g0.markDirty();
+                    PlanAPI.save();
+                    return Result.SUCCESS;
+                }
             }
 
             if (my < TITLE_H) {

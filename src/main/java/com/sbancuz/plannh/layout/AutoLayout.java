@@ -127,8 +127,19 @@ public final class AutoLayout {
      * arbitrary origin; callers anchor the result wherever they want.
      */
     public static Map<UUID, int[]> layout(final Collection<? extends LayoutNode> nodes, final Collection<Edge> links) {
+        return layout(nodes, links, Map.of());
+    }
+
+    /**
+     * @param margins world-space {@code {left, right}} to keep clear beside each node, by node id.
+     *                The boundary chips hang off a node's pins and are not nodes themselves, so
+     *                without this the layout packs a neighbour exactly where the label goes and the
+     *                two overlap. Absent ids get no margin.
+     */
+    public static Map<UUID, int[]> layout(final Collection<? extends LayoutNode> nodes, final Collection<Edge> links,
+        final Map<UUID, int[]> margins) {
         try {
-            return layout(nodes, links, GraphCompactionStrategy.LEFT_RIGHT_CONSTRAINT_LOCKING);
+            return layout(nodes, links, margins, GraphCompactionStrategy.LEFT_RIGHT_CONSTRAINT_LOCKING);
         } catch (final IllegalStateException e) {
             // "Invalid hitboxes for scanline constraint calculation" - ELK's post-compaction pass
             // rejects its own hitboxes on roughly 1 chart in 400 (measured: 3 of 1200 random
@@ -136,12 +147,20 @@ public final class AutoLayout {
             // chart fails every time and this fallback is as deterministic as the primary path.
             // Dropping the pass costs 3-20% width and no height. A second failure would be a
             // different bug, so the retry runs unguarded.
-            return layout(nodes, links, GraphCompactionStrategy.NONE);
+            return layout(nodes, links, margins, GraphCompactionStrategy.NONE);
         }
     }
 
+    /** {@code {left, right}} padding for a node, or zeroes when it has no labels hanging off it. */
+    private static int[] padOf(final Map<UUID, int[]> margins, final UUID id) {
+        final int[] margin = margins.get(id);
+        return margin == null ? EMPTY_PAD : margin;
+    }
+
+    private static final int[] EMPTY_PAD = { 0, 0 };
+
     private static Map<UUID, int[]> layout(final Collection<? extends LayoutNode> nodes, final Collection<Edge> links,
-        final GraphCompactionStrategy compaction) {
+        final Map<UUID, int[]> margins, final GraphCompactionStrategy compaction) {
         final Map<UUID, int[]> result = new HashMap<>();
         if (nodes.isEmpty()) return result;
 
@@ -192,7 +211,13 @@ public final class AutoLayout {
 
         for (final LayoutNode node : ordered) {
             final ElkNode n = ElkGraphUtil.createNode(root);
-            n.setWidth(node.worldWidth());
+            // Space for the boundary labels is baked into the box rather than declared as a node
+            // margin: ELK layered recomputes MARGINS during placement for its own labels and ports,
+            // so an input margin is silently discarded and the next column lands on top of the
+            // text. A wider box cannot be ignored. The padding is taken back off the result below,
+            // and the pins shift with it so edges still meet the node where it is really drawn.
+            final int[] pad = padOf(margins, node.id());
+            n.setWidth(node.worldWidth() + pad[0] + pad[1]);
             n.setHeight(node.worldHeight());
             // Real pin coordinates, not just sides: node placement then straightens edges
             // against the positions the canvas actually draws, so single connections line up
@@ -204,7 +229,7 @@ public final class AutoLayout {
             for (int i = 0; i < node.outputCount(); i++) {
                 final ElkPort p = ElkGraphUtil.createPort(n);
                 p.setProperty(CoreOptions.PORT_SIDE, PortSide.EAST);
-                p.setX(node.worldWidth());
+                p.setX(pad[0] + node.worldWidth());
                 p.setY(PortGeometry.portY(i));
                 outs[i] = p;
             }
@@ -214,7 +239,7 @@ public final class AutoLayout {
             for (int i = 0; i < node.inputCount(); i++) {
                 final ElkPort p = ElkGraphUtil.createPort(n);
                 p.setProperty(CoreOptions.PORT_SIDE, PortSide.WEST);
-                p.setX(0);
+                p.setX(pad[0]);
                 p.setY(PortGeometry.portY(i));
                 ins[i] = p;
             }
@@ -234,7 +259,9 @@ public final class AutoLayout {
 
         for (final Map.Entry<UUID, ElkNode> entry : elkNodes.entrySet()) {
             final ElkNode n = entry.getValue();
-            result.put(entry.getKey(), new int[] { (int) Math.round(n.getX()), (int) Math.round(n.getY()) });
+            // Undo the left padding: the caller positions the node, not the node-plus-its-labels.
+            final int left = padOf(margins, entry.getKey())[0];
+            result.put(entry.getKey(), new int[] { (int) Math.round(n.getX()) + left, (int) Math.round(n.getY()) });
         }
         return result;
     }

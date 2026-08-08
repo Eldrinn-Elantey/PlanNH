@@ -14,6 +14,7 @@ import org.ojalgo.optimisation.Optimisation;
 import org.ojalgo.optimisation.Variable;
 
 import com.gtnewhorizons.angelica.shadow.javax.annotation.Nonnull;
+import com.gtnewhorizons.angelica.shadow.javax.annotation.Nullable;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.RecipeProperty;
@@ -64,7 +65,10 @@ public final class Balancer {
      */
     @Nonnull
     private static BalanceResult balanceAuto(final Graph graph) {
-        final AutoBalancer.Result result = AutoBalancer.solve(graph);
+        // One pass produces both the chart and the answers it could have had: the panel shows the
+        // alternatives unconditionally now, and re-deriving them would mean solving twice per edit.
+        final AutoBalancer.Answer answer = AutoBalancer.solveWithAlternatives(graph, Map.of(), graph.getExcessChoice());
+        final AutoBalancer.Result result = answer.result();
         if (!result.isSuccess()) {
             if (AutoBalancer.NO_PIN.equals(result.failure())) {
                 // Expected state, not an error: an unpinned chart is just wiring, so it gets
@@ -85,7 +89,12 @@ public final class Balancer {
                 .size(),
             solution.openGates(),
             solution.wallMillis());
-        return buildResultFractional(graph, solution.machineCounts(), solution.notes());
+        return buildResultFractional(
+            graph,
+            solution.machineCounts(),
+            solution.notes(),
+            solution,
+            answer.alternatives());
     }
 
     /** A quantity-free result: recipes and durations only, plus the reason as a summary note. */
@@ -97,7 +106,7 @@ public final class Balancer {
             final int durPerOp = eff.durationTicks();
             nodeBalances.put(node.id, new NodeBalance(0, durPerOp, 0, durPerOp, Map.of(), Map.of()));
         }
-        return new BalanceResult(nodeBalances, Map.of(), 0, 0, List.of(note));
+        return new BalanceResult(nodeBalances, Map.of(), 0, 0, List.of(note), null, null);
     }
 
     @Nonnull
@@ -124,7 +133,7 @@ public final class Balancer {
         for (final Map.Entry<UUID, Integer> entry : ops.entrySet()) {
             fractional.put(entry.getKey(), (double) entry.getValue());
         }
-        return buildResultFractional(graph, fractional, List.of());
+        return buildResultFractional(graph, fractional, List.of(), null, null);
     }
 
     /**
@@ -134,7 +143,7 @@ public final class Balancer {
      */
     @Nonnull
     static BalanceResult buildResultFractional(final Graph graph, final Map<UUID, Double> machineCounts,
-        final List<String> notes) {
+        final List<String> notes, final AutoBalancer.Solution auto, final AutoBalancer.Alternatives alternatives) {
         final Map<UUID, NodeBalance> nodeBalances = new HashMap<>();
         final Map<RecipeProperty<?>, Long> propertyTotals = new HashMap<>();
         double totalOps = 0;
@@ -186,15 +195,21 @@ public final class Balancer {
             }
         }
 
-        return new BalanceResult(nodeBalances, propertyTotals, totalOps, totalDuration, notes);
+        return new BalanceResult(nodeBalances, propertyTotals, totalOps, totalDuration, notes, auto, alternatives);
     }
 
     public record NodeBalance(double operations, int totalDurationTicks, long totalEnergy, int durationPerOp,
         Map<Integer, Float> effectiveOutputs, Map<Integer, Float> effectiveInputs) {}
 
-    /** {@code notes}: solver messages worth the user's eyes (e.g. "missing an edge?"). */
+    /**
+     * {@code notes}: solver messages worth the user's eyes (e.g. "missing an edge?"). {@code auto}
+     * is the AUTO solver's own answer, null in every other mode - it carries where each external
+     * went, which the netted {@link Summary} cannot reconstruct and which is the difference between
+     * "this is a product" and "this is being thrown away at that port".
+     */
     public record BalanceResult(Map<UUID, NodeBalance> nodeBalances, Map<RecipeProperty<?>, Long> propertyTotals,
-        double totalOperations, int totalDurationTicks, List<String> notes) {}
+        double totalOperations, int totalDurationTicks, List<String> notes, @Nullable AutoBalancer.Solution auto,
+        @Nullable AutoBalancer.Alternatives alternatives) {}
 
     /**
      * Solves the optimal machine counts via a continuous LP relaxation, then rounds each

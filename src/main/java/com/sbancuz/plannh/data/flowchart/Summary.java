@@ -11,6 +11,13 @@ import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
 
 public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>> properties) {
 
+    /**
+     * Relative tolerance for "produced and consumed cancel". Float epsilon is ~1.2e-7 and these are
+     * sums over many ports, so this sits far enough above it to survive accumulation while staying
+     * orders of magnitude below any shortfall worth reporting.
+     */
+    private static final float NET_EPS = 1e-4f;
+
     public enum SummaryMode {
         CYCLES,
         THROUGHPUT
@@ -102,14 +109,16 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
         }
 
         // Net by resource: output = max(0, prod - cons), input = max(0, cons - prod).
-        // Relative tolerance at float-noise scale only: solver flows arrive as float sums, so a
-        // fully recycled resource can miss exact equality; anything looser hides real shortfalls.
+        // The tolerance has to clear the accumulated float error, not one float's worth of it:
+        // these are sums over every port carrying the resource, so error grows with the number of
+        // contributors, and at 1e-6 a fully recycled ingredient on a large chart prints a ghost
+        // line for a rate that is really zero.
         final Map<LineKey, Float> netInputs = new HashMap<>();
         for (final var entry : inputMap.entrySet()) {
             final LineKey key = entry.getKey();
             final float cons = entry.getValue();
             final float prod = outputMap.getOrDefault(key, 0f);
-            final float eps = Math.max(prod, cons) * 1e-6f;
+            final float eps = Math.max(prod, cons) * NET_EPS;
             if (Math.abs(cons - prod) <= eps) {
                 outputMap.remove(key);
             } else if (cons > prod) {

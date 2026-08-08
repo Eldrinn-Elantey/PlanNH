@@ -34,6 +34,14 @@ public class Graph {
     @Getter
     private boolean opsMode;
 
+    /**
+     * Which of the equally-workable answers the user picked, or null for the solver's own. Applied
+     * as a preference, never as a constraint: a key that no longer fits the chart is dropped with a
+     * note rather than allowed to degrade it.
+     */
+    @Getter
+    private AutoBalancer.ChoiceKey excessChoice;
+
     private Balancer.BalanceResult balance = null;
     private Summary summary = null;
 
@@ -41,6 +49,11 @@ public class Graph {
 
     public void markDirty() {
         dirty = true;
+    }
+
+    public void setExcessChoice(final AutoBalancer.ChoiceKey choice) {
+        excessChoice = choice;
+        markDirty();
     }
 
     public void setBalanceMode(final Balancer.BalanceMode mode) {
@@ -67,6 +80,16 @@ public class Graph {
             dirty = false;
         }
         return balance;
+    }
+
+    /**
+     * Every answer that balances this chart as well as the one on screen. Produced by the same pass
+     * that produced the balance, so asking costs nothing beyond the solve that already happened.
+     */
+    public AutoBalancer.Alternatives alternatives() {
+        final AutoBalancer.Alternatives computed = balance().alternatives();
+        return computed == null ? new AutoBalancer.Alternatives(null, java.util.List.of(), true, java.util.List.of())
+            : computed;
     }
 
     public Summary summary() {

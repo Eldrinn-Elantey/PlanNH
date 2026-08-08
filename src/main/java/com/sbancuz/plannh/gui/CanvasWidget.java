@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import net.minecraft.client.Minecraft;
+
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.opengl.GL11;
@@ -28,6 +30,7 @@ import com.cleanroommc.modularui.widgets.menu.Menu;
 import com.sbancuz.plannh.Config;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.api.PlanAPI;
+import com.sbancuz.plannh.data.flowchart.BalanceView;
 import com.sbancuz.plannh.data.flowchart.Edge;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Group;
@@ -373,7 +376,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         // the layout, so log and keep the current positions.
         final Map<UUID, int[]> positions;
         try {
-            positions = AutoLayout.layout(nodeWidgets.values(), graph.getEdges());
+            positions = AutoLayout.layout(nodeWidgets.values(), graph.getEdges(), chipMargins());
         } catch (final RuntimeException | StackOverflowError e) {
             PlanNH.LOG.error("Auto-layout failed; node positions left unchanged", e);
             return;
@@ -427,12 +430,128 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         super.draw(context, widgetTheme);
 
         drawArrows();
+        drawExternalChips();
 
         if (creatingEdge) {
             drawPreviewLine();
         }
 
         Stencil.remove();
+    }
+
+    // -------------------------------------------------------------------------------------
+    // External chips
+    // -------------------------------------------------------------------------------------
+
+    /** Gap in world units between a node's edge and the chip that hangs off it. */
+    private static final int CHIP_GAP = 22;
+    private static final int CHIP_H = 11;
+    /** Horizontal breathing room either side of the label, in world units. */
+    private static final int CHIP_PAD_X = 3;
+    /** How far below the pin the chip hangs, in world units. */
+    private static final int CHIP_DROP = 3;
+    private static final float CHIP_TEXT_SCALE = 0.5f;
+    /** Below this zoom the labels are unreadable, so the chips are only clutter. */
+    private static final float CHIP_MIN_ZOOM = 0.45f;
+
+    /**
+     * Stub source and sink markers for everything crossing the chart's boundary: what is imported,
+     * what is thrown away, and what simply arrives or leaves as a terminal.
+     *
+     * <p>
+     * Derived from the solve, never stored - they are not {@link Node}s, take no part in layout or
+     * routing, and vanish with the solution that produced them. Their whole job is to make
+     * "0.28571/s Cauldron" and "2.97/s Charcoal we could not avoid making" look different on
+     * screen, which the netted summary alone cannot do.
+     */
+    /**
+     * World-space room to keep clear beside each node for its boundary chips, {@code {left, right}}
+     * by node id. The chips are drawn, not laid out, so the layout would otherwise put the next
+     * column exactly where "533.33mB/s Air" goes.
+     */
+    private Map<UUID, int[]> chipMargins() {
+        final Map<UUID, int[]> margins = new HashMap<>();
+        for (final BalanceView.Boundary flow : BalanceView.boundary(graph)) {
+            final int width = CHIP_GAP + CHIP_PAD_X * 2
+                + Math.round(Minecraft.getMinecraft().fontRenderer.getStringWidth(flow.label()) * CHIP_TEXT_SCALE);
+            final int side = flow.port()
+                .input() ? 0 : 1;
+            final int[] margin = margins.computeIfAbsent(
+                flow.port()
+                    .nodeId(),
+                k -> new int[2]);
+            margin[side] = Math.max(margin[side], width);
+        }
+        return margins;
+    }
+
+    private void drawExternalChips() {
+        if (graph.getZoom() < CHIP_MIN_ZOOM) return;
+        for (final BalanceView.Boundary flow : BalanceView.boundary(graph)) {
+            drawChip(flow);
+        }
+    }
+
+    private void drawChip(final BalanceView.Boundary flow) {
+        final RecipeNodeWidget widget = nodeWidgets.get(
+            flow.port()
+                .nodeId());
+        if (widget == null) return;
+        final boolean input = flow.port()
+            .input();
+        final int index = flow.port()
+            .portIndex();
+
+        final int background;
+        final int textColor;
+        switch (flow.kind()) {
+            // Excess reads as an output, because that is what it is: the same colours a terminal
+            // product gets, not a warning. All that sets it apart is the word "excess" in its label
+            // and the port it hangs off.
+            case EXCESS -> {
+                background = PlannhColors.CHIP_EXCESS_BG.getColor();
+                textColor = PlannhColors.ACCENT_GREEN2.getColor();
+            }
+            case IMPORT -> {
+                background = PlannhColors.CHIP_IMPORT_BG.getColor();
+                textColor = PlannhColors.ACCENT_AMBER.getColor();
+            }
+            case PRODUCT -> {
+                background = PlannhColors.CHIP_TERMINAL_BG.getColor();
+                textColor = PlannhColors.ACCENT_GREEN2.getColor();
+            }
+            default -> {
+                background = PlannhColors.CHIP_TERMINAL_BG.getColor();
+                textColor = PlannhColors.ACCENT_BLUE2.getColor();
+            }
+        }
+
+        final float zoom = graph.getZoom();
+        final float textScale = CHIP_TEXT_SCALE * zoom;
+        final int textW = Math.round(Minecraft.getMinecraft().fontRenderer.getStringWidth(flow.label()) * textScale);
+        final int textH = Math.round(Minecraft.getMinecraft().fontRenderer.FONT_HEIGHT * textScale);
+        final int chipW = textW + Math.round(CHIP_PAD_X * 2 * zoom);
+        final int chipH = Math.round(CHIP_H * zoom);
+        final int thickness = Math.max(1, Math.round(zoom));
+
+        final int gap = Math.round(CHIP_GAP * zoom);
+        // Level with its pin, except for a surplus, which drops just below the line so that the one
+        // chip a reader has to look twice at is the one that is not where the others are.
+        final int drop = flow.kind() == BalanceView.Kind.EXCESS ? Math.round(CHIP_DROP * zoom) : -chipH / 2;
+        final int y = widgetY(widget) + portY(index) + drop;
+        final int nodeRight = widgetX(widget) + Math.round(widget.getArea().width * zoom);
+        final int x = input ? widgetX(widget) - gap - chipW : nodeRight + gap;
+
+        // The stub reads as attached rather than floating: a lead from the pin to the chip edge.
+        final int pinY = widgetY(widget) + portY(index);
+        GuiDraw.drawRect(input ? x + chipW : nodeRight, pinY, gap, thickness, textColor);
+
+        GuiDraw.drawRect(x, y, chipW, chipH, background);
+        GuiDraw.drawRect(x, y, chipW, thickness, PlannhColors.CHIP_BORDER.getColor());
+        GuiDraw.drawRect(x, y + chipH - thickness, chipW, thickness, PlannhColors.CHIP_BORDER.getColor());
+        // Centred in the box on both axes, measured rather than nudged: the label is what sizes
+        // the chip, so the padding either side is the same number the width was built from.
+        GuiDraw.drawText(flow.label(), x + (chipW - textW) / 2, y + (chipH - textH) / 2, textScale, textColor, false);
     }
 
     private void drawGrid(final int w, final int h) {

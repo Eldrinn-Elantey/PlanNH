@@ -32,6 +32,9 @@ public final class TestIngredients {
         .amountExtractor(i -> i.amount)
         .amountUpdater((i, amount) -> i.amount = amount)
         .connectionChecker((a, b) -> a.name.equals(b.name))
+        // Without this every port reports the resource id, so a headless label reads "void 530/s
+        // test_ingredient" and any test of what a player would read asserts nothing.
+        .displayFormatter(i -> i.name)
         .hashCodeExtractor(i -> i.name.hashCode())
         .build();
 
