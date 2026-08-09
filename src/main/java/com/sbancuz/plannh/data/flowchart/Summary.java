@@ -23,6 +23,16 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
         THROUGHPUT
     }
 
+    /** The summary panel's collapsible sections, in the order they are drawn. */
+    public enum SummarySection {
+        CHOICES,
+        INPUTS,
+        OUTPUTS,
+        OPERATIONS,
+        PROPERTIES,
+        NOTES
+    }
+
     public record Line<T> (RecipeProperty<T> label, T resource, float amount) {
 
         public String displayName() {

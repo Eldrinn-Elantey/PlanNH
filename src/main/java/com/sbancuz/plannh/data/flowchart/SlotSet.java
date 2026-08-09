@@ -1,9 +1,11 @@
 package com.sbancuz.plannh.data.flowchart;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
+import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
 
 public class SlotSet {
 
@@ -29,6 +31,8 @@ public class SlotSet {
     public int summaryY = DEFAULT_SUMMARY_Y;
     public boolean summaryCollapsed = false;
     public SummaryMode summaryMode = SummaryMode.CYCLES;
+    /** Sections folded away in the summary panel; the per-node operation list starts folded. */
+    public final EnumSet<SummarySection> collapsedSummarySections = EnumSet.of(SummarySection.OPERATIONS);
 
     /** Clamps activeSlot and guarantees a slot exists. */
     private Slot activeSlot() {

@@ -20,6 +20,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
@@ -27,6 +28,7 @@ import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.SettingDef;
 import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
+import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
 
 import codechicken.nei.recipe.Recipe;
 
@@ -96,6 +98,11 @@ public final class Serializer {
         root.addProperty("summaryY", set.summaryY);
         root.addProperty("summaryCollapsed", set.summaryCollapsed);
         root.addProperty("summaryMode", set.summaryMode.name());
+        final JsonArray collapsedSections = new JsonArray();
+        for (final SummarySection section : set.collapsedSummarySections) {
+            collapsedSections.add(new JsonPrimitive(section.name()));
+        }
+        root.add("summaryCollapsedSections", collapsedSections);
         final JsonArray arr = new JsonArray();
         for (final SlotSet.Slot slot : set.slots) {
             final JsonObject slotObj = new JsonObject();
@@ -128,6 +135,16 @@ public final class Serializer {
                     root.get("summaryMode")
                         .getAsString());
             } catch (final IllegalArgumentException ignored) {}
+        }
+        // Absent key keeps the defaults, so saves written before sections were foldable open with
+        // the operation list folded like a fresh install.
+        if (root.has("summaryCollapsedSections")) {
+            set.collapsedSummarySections.clear();
+            for (final JsonElement elem : root.getAsJsonArray("summaryCollapsedSections")) {
+                try {
+                    set.collapsedSummarySections.add(SummarySection.valueOf(elem.getAsString()));
+                } catch (final IllegalArgumentException ignored) {}
+            }
         }
         final JsonArray arr = root.getAsJsonArray("slots");
         for (final JsonElement elem : arr) {
