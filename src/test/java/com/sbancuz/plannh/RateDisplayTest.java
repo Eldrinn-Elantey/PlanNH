@@ -27,6 +27,7 @@ class RateDisplayTest {
     void bigRatesFollowTheSuffixTableTheRestOfThePackUses() {
         // NEI and AE2 both abbreviate with "kMGTPE" over 1000, so G is a billion here too - and B
         // stays what fluid amounts use for buckets rather than becoming a second spelling of giga.
+        assertEquals("1.2k", GuiHelper.formatRate(1200f));
         assertEquals("1.5G", GuiHelper.formatRate(1.5e9f));
         assertEquals("2.0T", GuiHelper.formatRate(2e12f));
     }

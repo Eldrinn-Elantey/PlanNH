@@ -708,9 +708,10 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         final FontRenderer font = Minecraft.getMinecraft().fontRenderer;
         for (final int idx : targetableOutputs()) {
             final double current = node.targetOutputRates.getOrDefault(idx, 0.0);
-            final String value = current > 0 ? node.outputs.get(idx)
-                .getType()
-                .formatAmount((float) current) + "/s" : "off";
+            // Scale suffixes but not the port's formatter: this row is what the rate editor writes
+            // back, and the editor takes a plain number. "1.2k" is the same quantity as 1200, but a
+            // fluid's "1.0B" is 1000 litres in a field that wants litres.
+            final String value = current > 0 ? GuiHelper.formatRate((float) current) + "/s" : "off";
             final int valueW = font.getStringWidth(value);
             final String label = font.trimStringToWidth(
                 "Tgt " + node.outputs.get(idx)

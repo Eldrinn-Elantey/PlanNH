@@ -50,8 +50,10 @@ public final class RecipePropertyAPI {
     public static final RecipeResource<FluidStack> FLUID = RecipeResource
         .<FluidStack>builder("fluid", new FluidStack(FluidRegistry.WATER, 0, null))
         .displayFormatter(FluidStack::getLocalizedName)
+        // Buckets past a thousand litres, litres below, and the same suffix table over whichever
+        // unit is in play - so a big line reads 1.0kB rather than running out of digits at 1000.0B.
         .amountFormatter(amount -> {
-            if (amount >= 1000f) return String.format("%.1fB", amount / 1000f);
+            if (amount >= 1000f) return GuiHelper.trimTrailingZeros(GuiHelper.formatRate(amount / 1000f)) + "B";
             return GuiHelper.trimTrailingZeros(GuiHelper.formatRate(amount)) + "mB";
         })
         .amountExtractor(fs -> fs.amount)
