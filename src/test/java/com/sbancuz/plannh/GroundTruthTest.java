@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,30 @@ import com.sbancuz.plannh.harness.TestIngredients;
 class GroundTruthTest {
 
     private static final double EPS = 1e-4;
+
+    @Test
+    void repeatedSolvesOfOneChartAgree() {
+        // Solving the same chart twice has to give the same answer, and one solve per test does not
+        // check that: the stage-2 MILP returns different members of the same tied optimum depending
+        // on how many solves the JVM has already run, which two_decisions used to turn into two
+        // different answers at solve 4, 10 and 16. Every candidate is equally good by then, so the
+        // fix is in which of them the enumeration is guaranteed to hold, not in the objectives -
+        // hence a repeat count rather than an expected value.
+        for (final String name : new String[] { "two_decisions", "symmetric_choice", "excess_choice" }) {
+            final Set<String> answers = new HashSet<>();
+            for (int i = 0; i < 12; i++) {
+                final Result result = AutoBalancer.solve(
+                    GtnhFlowLoader.load(name)
+                        .graph());
+                assertTrue(result.isSuccess(), () -> name + " failed: " + result.failure());
+                answers.add(
+                    String.valueOf(
+                        result.solution()
+                            .key()));
+            }
+            assertEquals(1, answers.size(), () -> name + " answered " + answers.size() + " ways over 12 solves");
+        }
+    }
 
     @Test
     void solverEffortIsClampedToItsAdvertisedRange() {

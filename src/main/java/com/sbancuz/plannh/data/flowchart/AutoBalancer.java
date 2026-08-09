@@ -739,35 +739,44 @@ public final class AutoBalancer {
         // candidate's support unions the two, which makes every later candidate a relaxation of the
         // first: it can then win on internal flow using gates from both supports, above the count
         // stage 1 proved optimal, and report only its own support's size for them.
+        final StageSolve s1Fixed = certified ? solveStage2Fixed(ctx, floors, s1Carrying) : null;
         final List<StageSolve> candidates = certified && !ctx.budget.expired()
-            ? tiedSupports(ctx, floors, weightedCap, s2, scale)
+            ? tiedSupports(ctx, floors, weightedCap, s2, s1Fixed, scale)
             : List.of(s2);
         StageSolve best = null;
         Set<Integer> bestSupport = null;
+        boolean bestFromStage1 = false;
         for (final StageSolve cand : candidates) {
             final Set<Integer> open = ctx.carryingGates(cand.externals, cand.support);
+            final boolean fromStage1 = cand == s1Fixed;
             StageSolve s3 = solveStage3(ctx, floors, open, s2.externalQuantity);
             if (s3 == null) continue;
             s3 = canonicalize(ctx, floors, open, s3);
-            // Least internal flow wins; ties go to the lower ChoiceKey rather than to whichever
-            // candidate branch-and-bound happened to enumerate first. On a chart whose two answers
-            // are mirror images that order is the ONLY thing separating them, and it must not depend
-            // on the solver's internals or on an ojAlgo upgrade.
             if (best == null) {
                 best = s3;
                 bestSupport = s3.support;
+                bestFromStage1 = fromStage1;
                 continue;
             }
+            // Least internal flow wins. A tie there is a tie on every objective the solver has, so
+            // it is broken by two rules that are properties of the chart rather than of the search:
+            // the candidate grown from stage 1's certified support first, since that support is the
+            // same on every solve where the enumeration around it is not, then the lower ChoiceKey.
+            // On a chart whose answers are mirror images this order is the ONLY thing separating
+            // them, and it must not depend on the solver's internals or on an ojAlgo upgrade.
             final double tol = ctx.tieTolerance(best.internalFlow, best);
             final boolean better = s3.internalFlow < best.internalFlow - tol;
-            final boolean tiedButLower = Math.abs(s3.internalFlow - best.internalFlow) <= tol && ctx.keyOf(s3.support)
-                .compareTo(ctx.keyOf(bestSupport)) < 0;
-            if (better || tiedButLower) {
+            final boolean tied = Math.abs(s3.internalFlow - best.internalFlow) <= tol;
+            final boolean tiedButPreferred = tied
+                && (fromStage1 && !bestFromStage1 || fromStage1 == bestFromStage1 && ctx.keyOf(s3.support)
+                    .compareTo(ctx.keyOf(bestSupport)) < 0);
+            if (better || tiedButPreferred) {
                 // The support the returned point actually carries, not the candidate that led to
                 // it: those differ whenever stage 3 leaves one of the candidate's gates unused, and
                 // it is the former that Solution.openGates has to agree with.
                 best = s3;
                 bestSupport = s3.support;
+                bestFromStage1 = fromStage1;
             }
         }
         if (best == null) {
@@ -780,19 +789,28 @@ public final class AutoBalancer {
      * The stage-2 witness plus any other witness tied with it at the same (weighted gate count,
      * external quantity). Each is returned whole: a support without the externals that produced it
      * cannot say which of its gates actually carry flow.
+     *
+     * @param s1Fixed the least-quantity point over stage 1's OWN support, seeded ahead of the
+     *                search. Everything the search finds after {@code s2} depends on which of
+     *                several equal optima the MILP returns first, which is not a property of the
+     *                chart; stage 1's support is, so the one candidate that is always reachable is
+     *                the one this list would otherwise be least likely to hold.
      */
     private static List<StageSolve> tiedSupports(final FlowModel ctx, final double[] floors, final double weightedCap,
-        final StageSolve s2, final double scale) {
+        final StageSolve s2, final StageSolve s1Fixed, final double scale) {
         final List<StageSolve> candidates = new ArrayList<>();
         candidates.add(s2);
         final List<Set<Integer>> cuts = new ArrayList<>();
         cuts.add(s2.support);
         final Set<Set<Integer>> seen = new HashSet<>();
         seen.add(s2.support);
+        if (s1Fixed != null && ties(ctx, s1Fixed, s2, weightedCap) && seen.add(s1Fixed.support)) {
+            candidates.add(s1Fixed);
+            cuts.add(s1Fixed.support);
+        }
         while (candidates.size() < effort(MAX_TIED_SUPPORTS) && !ctx.budget.expired()) {
             final StageSolve next = solveStage2Cut(ctx, floors, weightedCap, cuts, scale);
-            if (next == null || next.externalQuantity > s2.externalQuantity + ctx.tieTolerance(s2.externalQuantity, s2)
-                || ctx.weightedCost(next.support) > weightedCap + 0.5) {
+            if (next == null || !ties(ctx, next, s2, weightedCap)) {
                 break;
             }
             // The no-good cuts are written over the binaries, but y_g = 1 with zero flow satisfies
@@ -804,6 +822,13 @@ public final class AutoBalancer {
             cuts.add(next.support);
         }
         return candidates;
+    }
+
+    /** Whether a witness matches the stage-2 optimum on quantity and still fits stage 1's gate cap. */
+    private static boolean ties(final FlowModel ctx, final StageSolve candidate, final StageSolve s2,
+        final double weightedCap) {
+        return candidate.externalQuantity <= s2.externalQuantity + ctx.tieTolerance(s2.externalQuantity, s2)
+            && ctx.weightedCost(candidate.support) <= weightedCap + 0.5;
     }
 
     /**
