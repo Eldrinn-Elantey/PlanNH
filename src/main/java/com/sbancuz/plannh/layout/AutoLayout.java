@@ -151,10 +151,24 @@ public final class AutoLayout {
         }
     }
 
-    /** {@code {left, right}} padding for a node, or zeroes when it has no labels hanging off it. */
+    /**
+     * {@code {left, right}} padding for a node, or zeroes when it has no labels hanging off it.
+     *
+     * <p>
+     * The caller asks for the clearance a label needs; what gets added is that minus the corridor
+     * the layout was going to leave anyway. Without the credit both nodes either side of a gap pay
+     * the full width of their own label on top of {@link #LAYER_SPACING}, and a chart of long
+     * ingredient names ends up with columns hundreds of units further apart than anything in them
+     * needs.
+     */
     private static int[] padOf(final Map<UUID, int[]> margins, final UUID id) {
         final int[] margin = margins.get(id);
-        return margin == null ? EMPTY_PAD : margin;
+        if (margin == null) return EMPTY_PAD;
+        return new int[] { credited(margin[0]), credited(margin[1]) };
+    }
+
+    private static int credited(final int requested) {
+        return requested <= 0 ? 0 : Math.max(0, requested - (int) (LAYER_SPACING / 2));
     }
 
     private static final int[] EMPTY_PAD = { 0, 0 };

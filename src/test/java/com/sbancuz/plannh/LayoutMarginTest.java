@@ -34,11 +34,25 @@ class LayoutMarginTest {
     }
 
     @Test
-    void askedForSpaceIsActuallyReserved() {
+    void askedForSpaceIsActuallyAvailable() {
+        // The contract is total clearance, not additional clearance: a label needing 200 units must
+        // END UP with 200 units of gap to its neighbour. Asking for it on top of the corridor the
+        // layout already leaves is how the columns ended up hundreds of units too far apart.
         final int bare = gap(AutoLayout.layout(NODES, LINKS));
         final int padded = gap(AutoLayout.layout(NODES, LINKS, Map.of(A, new int[] { 0, 200 })));
 
-        assertTrue(padded >= bare + 200, "a 200-unit label needs 200 units of room, got " + padded + " vs " + bare);
+        assertTrue(padded >= 200, "a 200-unit label must fit, got a " + padded + " gap");
+        assertTrue(padded > bare, "and it has to widen the gap at all, from " + bare);
+    }
+
+    @Test
+    void clearanceIsNotPaidTwiceOver() {
+        // The pathological case: both nodes either side of one corridor carry a label. Reserving
+        // each in full would sum them; what is needed is enough room for both plus the corridor.
+        final int both = gap(AutoLayout.layout(NODES, LINKS, Map.of(A, new int[] { 0, 200 }, B, new int[] { 200, 0 })));
+
+        assertTrue(both >= 400, "both labels must fit, got " + both);
+        assertTrue(both < 500, "but not with a whole extra corridor each, got " + both);
     }
 
     @Test

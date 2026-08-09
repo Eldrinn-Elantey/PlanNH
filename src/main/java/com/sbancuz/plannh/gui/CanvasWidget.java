@@ -2,8 +2,10 @@ package com.sbancuz.plannh.gui;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.client.Minecraft;
@@ -36,6 +38,7 @@ import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Group;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.flowchart.Note;
+import com.sbancuz.plannh.data.flowchart.Port;
 import com.sbancuz.plannh.data.flowchart.UndoHistory;
 import com.sbancuz.plannh.layout.AutoLayout;
 import com.sbancuz.plannh.nei.NodeLookupContext;
@@ -443,8 +446,11 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
     // External chips
     // -------------------------------------------------------------------------------------
 
-    /** Gap in world units between a node's edge and the chip that hangs off it. */
-    private static final int CHIP_GAP = 22;
+    /**
+     * Gap in world units between a node's edge and the chip that hangs off it. Short on purpose:
+     * every unit here is paid twice over in the layout, once by the node on each side of a corridor.
+     */
+    private static final int CHIP_GAP = 8;
     private static final int CHIP_H = 11;
     /** Horizontal breathing room either side of the label, in world units. */
     private static final int CHIP_PAD_X = 3;
@@ -469,11 +475,37 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
      * by node id. The chips are drawn, not laid out, so the layout would otherwise put the next
      * column exactly where "533.33mB/s Air" goes.
      */
+    /** World-space rectangles the chips occupy, for the router to route around. */
+    private List<ArrowRouter.Rect> chipRects() {
+        final List<ArrowRouter.Rect> rects = new ArrayList<>();
+        for (final BalanceView.Boundary flow : BalanceView.boundary(graph)) {
+            final RecipeNodeWidget widget = nodeWidgets.get(
+                flow.port()
+                    .nodeId());
+            if (widget == null) continue;
+            final int index = flow.port()
+                .portIndex();
+            final int width = chipWorldWidth(flow);
+            final boolean input = flow.port()
+                .input();
+            final int x = input ? widget.getNode().x - CHIP_GAP - width
+                : widget.getNode().x + worldWidth(widget) + CHIP_GAP;
+            final int y = widget.getNode().y + portWorldY(index) + chipOffset(flow.kind(), CHIP_H, CHIP_DROP);
+            rects.add(new ArrowRouter.Rect(x, y, width, CHIP_H));
+        }
+        return rects;
+    }
+
+    /** Chip width in world units - the same measurement the drawing and the layout margin use. */
+    private static int chipWorldWidth(final BalanceView.Boundary flow) {
+        return CHIP_PAD_X * 2
+            + Math.round(Minecraft.getMinecraft().fontRenderer.getStringWidth(flow.label()) * CHIP_TEXT_SCALE);
+    }
+
     private Map<UUID, int[]> chipMargins() {
         final Map<UUID, int[]> margins = new HashMap<>();
         for (final BalanceView.Boundary flow : BalanceView.boundary(graph)) {
-            final int width = CHIP_GAP + CHIP_PAD_X * 2
-                + Math.round(Minecraft.getMinecraft().fontRenderer.getStringWidth(flow.label()) * CHIP_TEXT_SCALE);
+            final int width = CHIP_GAP + chipWorldWidth(flow);
             final int side = flow.port()
                 .input() ? 0 : 1;
             final int[] margin = margins.computeIfAbsent(
@@ -492,6 +524,35 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         }
     }
 
+    /**
+     * Where a chip sits relative to its pin. Terminals stay level with it - nothing else is
+     * competing for that line. The two kinds that hang off a CONNECTED port step out of the way of
+     * the edge already using it, and step opposite ways so the two are told apart at a glance:
+     * a surplus leaving drops below, a shortfall arriving rides above.
+     */
+    private static int chipOffset(final BalanceView.Kind kind, final int chipHeight, final int drop) {
+        return switch (kind) {
+            case EXCESS -> drop;
+            case IMPORT -> -drop - chipHeight;
+            default -> -chipHeight / 2;
+        };
+    }
+
+    /** The wire colour for a boundary flow's ingredient, matching the edges that carry it. */
+    private int leadColor(final BalanceView.Boundary flow) {
+        final Node node = graph.nodes.get(
+            flow.port()
+                .nodeId());
+        if (node == null) return ARROW_COLOR_ITEM;
+        final List<Port<?>> ports = flow.port()
+            .input() ? node.inputs : node.outputs;
+        final int index = flow.port()
+            .portIndex();
+        return index < 0 || index >= ports.size() ? ARROW_COLOR_ITEM
+            : ports.get(index)
+                .getArrowColor();
+    }
+
     private void drawChip(final BalanceView.Boundary flow) {
         final RecipeNodeWidget widget = nodeWidgets.get(
             flow.port()
@@ -502,28 +563,17 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         final int index = flow.port()
             .portIndex();
 
-        final int background;
+        // Kind decides the ink, the ingredient decides the frame, and the fill is the same dark
+        // panel for all of them. The fill used to be tinted per kind and half transparent, which
+        // over a dark canvas left green-on-charcoal text nobody could read; the codebase already
+        // solves this for small labels with an almost-opaque near-black plate (PORT_LABEL_BG), and
+        // this is that.
         final int textColor;
         switch (flow.kind()) {
-            // Excess reads as an output, because that is what it is: the same colours a terminal
-            // product gets, not a warning. All that sets it apart is the word "excess" in its label
-            // and the port it hangs off.
-            case EXCESS -> {
-                background = PlannhColors.CHIP_EXCESS_BG.getColor();
-                textColor = PlannhColors.ACCENT_GREEN2.getColor();
-            }
-            case IMPORT -> {
-                background = PlannhColors.CHIP_IMPORT_BG.getColor();
-                textColor = PlannhColors.ACCENT_AMBER.getColor();
-            }
-            case PRODUCT -> {
-                background = PlannhColors.CHIP_TERMINAL_BG.getColor();
-                textColor = PlannhColors.ACCENT_GREEN2.getColor();
-            }
-            default -> {
-                background = PlannhColors.CHIP_TERMINAL_BG.getColor();
-                textColor = PlannhColors.ACCENT_BLUE2.getColor();
-            }
+            case EXCESS -> textColor = PlannhColors.ACCENT_GREEN2.getColor();
+            case IMPORT -> textColor = PlannhColors.ACCENT_AMBER.getColor();
+            case PRODUCT -> textColor = PlannhColors.ACCENT_GREEN2.getColor();
+            default -> textColor = PlannhColors.ACCENT_BLUE2.getColor();
         }
 
         final float zoom = graph.getZoom();
@@ -535,20 +585,32 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         final int thickness = Math.max(1, Math.round(zoom));
 
         final int gap = Math.round(CHIP_GAP * zoom);
-        // Level with its pin, except for a surplus, which drops just below the line so that the one
-        // chip a reader has to look twice at is the one that is not where the others are.
-        final int drop = flow.kind() == BalanceView.Kind.EXCESS ? Math.round(CHIP_DROP * zoom) : -chipH / 2;
-        final int y = widgetY(widget) + portY(index) + drop;
+        final int y = widgetY(widget) + portY(index) + chipOffset(flow.kind(), chipH, Math.round(CHIP_DROP * zoom));
         final int nodeRight = widgetX(widget) + Math.round(widget.getArea().width * zoom);
         final int x = input ? widgetX(widget) - gap - chipW : nodeRight + gap;
 
-        // The stub reads as attached rather than floating: a lead from the pin to the chip edge.
+        // The stub reads as attached rather than floating: a lead from the pin to the chip edge,
+        // in the ingredient's own wire colour so it matches the edges carrying the same thing. The
+        // label keeps its kind colour - the line says WHAT, the text says what is happening to it.
+        //
+        // Drawn the way a machine-to-machine edge is drawn, contrast underlay and all: an oak-wood
+        // brown hairline over a night-time world is invisible without one, and the lead was the
+        // only wire on the canvas not getting that treatment.
+        final int leadColor = leadColor(flow);
+        final int outline = IngredientColors.outlineFor(leadColor);
+        final float leadThick = Math.max(LINE_THICK_MIN, LINE_THICK_BASE * zoom);
+        final int leadX = input ? x + chipW : nodeRight;
         final int pinY = widgetY(widget) + portY(index);
-        GuiDraw.drawRect(input ? x + chipW : nodeRight, pinY, gap, thickness, textColor);
+        final int[] leadXs = { leadX, leadX + gap };
+        final int[] leadYs = { pinY, pinY };
+        drawLineStrip(leadXs, leadYs, outline, leadThick + EDGE_OUTLINE_EXTRA);
+        drawLineStrip(leadXs, leadYs, leadColor, leadThick);
 
-        GuiDraw.drawRect(x, y, chipW, chipH, background);
-        GuiDraw.drawRect(x, y, chipW, thickness, PlannhColors.CHIP_BORDER.getColor());
-        GuiDraw.drawRect(x, y + chipH - thickness, chipW, thickness, PlannhColors.CHIP_BORDER.getColor());
+        GuiDraw.drawRect(x, y, chipW, chipH, PlannhColors.CHIP_BG.getColor());
+        // Framed in the ingredient's wire colour so the chip, its lead and the edges carrying the
+        // same thing read as one run. No contrast ring around it: the frame already sits against an
+        // opaque plate, so unlike the hairline lead it was never in danger of disappearing.
+        GuiHelper.drawRectBorder(x, y, chipW, chipH, thickness, leadColor);
         // Centred in the box on both axes, measured rather than nudged: the label is what sizes
         // the chip, so the padding either side is the same number the width was built from.
         GuiDraw.drawText(flow.label(), x + (chipW - textW) / 2, y + (chipH - textH) / 2, textScale, textColor, false);
@@ -647,6 +709,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         for (final RecipeNodeWidget w : nodeWidgets.values()) {
             obstacles.add(new ArrowRouter.Rect(w.getNode().x, w.getNode().y, worldWidth(w), worldHeight(w)));
         }
+
         final List<ArrowRouter.Request> requests = new ArrayList<>();
         for (final Edge edge : graph.getEdges()) {
             final RecipeNodeWidget src = nodeWidgets.get(edge.sourceNodeId);
@@ -659,7 +722,20 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
             requests.add(new ArrowRouter.Request(edge.id, sx, sy, dx, dy));
         }
 
-        edgeRoutes.putAll(ARROW_ROUTER.route(obstacles, requests));
+        // Chips are no-turn zones rather than obstacles: a chip sits directly on the approach to
+        // its own port, so blocking it would seal the only way in and drop the edge to a
+        // straight-line fallback that ignores everything. Passing behind a label is fine; turning
+        // under one is what reads as the arrow terminating there.
+        final Set<UUID> fellBack = new HashSet<>();
+        edgeRoutes.putAll(ARROW_ROUTER.route(obstacles, chipRects(), requests, fellBack));
+
+        // A fallback ignores every obstacle, so it is the one route that can end up crossing a
+        // node or cornering under a label however the zones are set up. Worth saying out loud
+        // rather than leaving someone to infer it from a screenshot.
+        if (!fellBack.isEmpty()) {
+            PlanNH.LOG
+                .info("Arrow routing fell back for {} of {} edges: {}", fellBack.size(), requests.size(), fellBack);
+        }
 
         if (!Config.debugRouteDump) return;
 
@@ -718,6 +794,11 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
 
     private long computeRouteSignature() {
         long sig = ROUTE_HASH_SEED;
+        // The chips are obstacles, so a re-solve that moves or renames one has to invalidate the
+        // routes with it. The balance object's identity is the cheap proxy for "the chips changed":
+        // it is memoized and replaced wholesale whenever the chart is re-solved, where rebuilding
+        // every chip rectangle to hash it would run on each frame.
+        sig = mixRouteHash(sig, System.identityHashCode(graph.balance()));
         for (final Edge edge : graph.getEdges()) {
             final RecipeNodeWidget src = nodeWidgets.get(edge.sourceNodeId);
             final RecipeNodeWidget dst = nodeWidgets.get(edge.targetNodeId);
