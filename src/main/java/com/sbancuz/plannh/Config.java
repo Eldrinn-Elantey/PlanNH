@@ -13,19 +13,16 @@ public final class Config {
     public static boolean debugRouteDump = false;
 
     /**
-     * Drops the summary's Machine Counts section entirely rather than folding it. Separate from the
-     * fold state because they answer different questions: a fold is "not right now" and lives per
-     * save, this is "never show me this" and lives with the install.
+     * Drops the summary's Machine Counts section entirely rather than folding it: a fold is "not on
+     * this chart" and lives per slot, this is "never" and lives with the install.
      */
     public static boolean hideMachineCountsSection = false;
 
     /**
-     * Ingredients nobody plumbs. The wiring diagnostics exist to catch an edge the user meant to
-     * draw, and a chart taking water from outside while another machine happens to make some is
-     * not that - it is how everyone builds. Names, not registry ids: this is a nuisance filter the
-     * user edits by hand, and the panel already talks to them in display names.
+     * Ingredients nobody plumbs, so the wiring diagnostics stay quiet about them. Display names
+     * rather than registry ids: this is a nuisance filter the user edits by hand.
      */
-    public static final String[] DEFAULT_FREE_INGREDIENTS = { "Water" };
+    private static final String[] DEFAULT_FREE_INGREDIENTS = { "Water" };
 
     /** {@link #DEFAULT_FREE_INGREDIENTS} folded to lower case for lookup. */
     private static Set<String> freeIngredients = lowercased(DEFAULT_FREE_INGREDIENTS);
@@ -40,6 +37,10 @@ public final class Config {
     /** Replaces the free list. Names are matched case- and whitespace-insensitively from here on. */
     public static void setFreeIngredients(final String... names) {
         freeIngredients = lowercased(names);
+    }
+
+    public static void resetFreeIngredients() {
+        setFreeIngredients(DEFAULT_FREE_INGREDIENTS);
     }
 
     private static Set<String> lowercased(final String[] names) {

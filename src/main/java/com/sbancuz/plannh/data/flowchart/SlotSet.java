@@ -28,8 +28,7 @@ public class SlotSet {
         public final transient UndoHistory undoHistory = new UndoHistory();
         /**
          * Per slot rather than per set: a fold says "not on this chart", and the next chart is a
-         * different question. Inherited globally, one unfolded panel followed the user into every
-         * chart they opened afterwards and there was no way back to the defaults.
+         * different question.
          */
         public final EnumSet<SummarySection> collapsedSummarySections = defaultSummaryFolds();
 

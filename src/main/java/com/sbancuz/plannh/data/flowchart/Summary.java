@@ -19,6 +19,9 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
      */
     private static final float NET_EPS = 1e-4f;
 
+    private static final Comparator<Line<?>> BY_AMOUNT = Comparator.comparingDouble((Line<?> l) -> l.amount())
+        .thenComparing(Line::displayName);
+
     public enum SummaryMode {
         CYCLES,
         THROUGHPUT
@@ -151,18 +154,13 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
             propertyMap.merge(new LineKey.PropertyKey(entry.getKey()), (float) entry.getValue(), Float::sum);
         }
 
-        // Sorted opposite ways on purpose: an output list answers "what does this chart make", so
-        // the headline product leads, while an input list is a shopping list and the rarest thing
-        // on it - the one line that will actually be a problem - is the smallest number.
-        // Name breaks ties so a chart carrying two equal flows does not shuffle between frames.
+        // Opposite ways on purpose: an output list leads with the headline product, an input list
+        // with the scarcest ingredient. Name breaks ties, or equal flows shuffle between frames.
         return new Summary(
             flatten(outputMap, BY_AMOUNT.reversed()),
             flatten(inputMap, BY_AMOUNT),
             flatten(propertyMap, BY_AMOUNT));
     }
-
-    private static final Comparator<Line<?>> BY_AMOUNT = Comparator.comparingDouble((Line<?> l) -> l.amount())
-        .thenComparing(Line::displayName);
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static List<Line<?>> flatten(final Map<LineKey, Float> map, final Comparator<Line<?>> order) {

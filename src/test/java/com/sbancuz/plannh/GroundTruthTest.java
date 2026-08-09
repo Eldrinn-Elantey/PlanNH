@@ -369,7 +369,7 @@ class GroundTruthTest {
                     .noneMatch(n -> n.contains(AutoBalancer.MISSING_EDGE)),
                 "free ingredients are wired up by hand or not at all, got notes: " + s.notes());
         } finally {
-            Config.setFreeIngredients(Config.DEFAULT_FREE_INGREDIENTS);
+            Config.resetFreeIngredients();
         }
     }
 

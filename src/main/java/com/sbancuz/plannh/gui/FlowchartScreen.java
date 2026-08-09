@@ -189,9 +189,7 @@ public class FlowchartScreen extends ModularScreen {
                                     return true;
                                 }))
                         .child(
-                            // Dynamic, and read off the live SlotSet: built as a plain string this
-                            // label kept whichever slot was active when the screen opened, so the
-                            // arrows moved the canvas underneath a number that never followed.
+                            // Dynamic: the arrows move the active slot under this label.
                             IKey.dynamicKey(() -> IKey.str(slotLabel()))
                                 .asWidget()
                                 .color(Color.WHITE.main))
@@ -481,6 +479,28 @@ public class FlowchartScreen extends ModularScreen {
         private final Map<SummarySection, int[]> headerRows = new EnumMap<>(SummarySection.class);
 
         /**
+         * Nodes by descending operation count: the list is read for what to build most of, and the
+         * tail is the part nobody scrolls to. Cached against the balance that ordered them - the
+         * panel draws every frame and the counts only move when the chart is re-solved.
+         */
+        private BalanceResult sortedFor;
+        private List<Node> byOperations = List.of();
+
+        private List<Node> nodesByOperations(final BalanceResult br) {
+            if (br == sortedFor) return byOperations;
+            final List<Node> sorted = new ArrayList<>(graph().getNodes());
+            sorted.sort(Comparator.comparingDouble((final Node node) -> {
+                final NodeBalance nb = br.nodeBalances()
+                    .get(node.id);
+                return nb == null ? 0 : nb.operations();
+            })
+                .reversed());
+            sortedFor = br;
+            byOperations = List.copyOf(sorted);
+            return byOperations;
+        }
+
+        /**
          * Word-wrapped notes, held against the balance that produced them. Wrapping runs the font
          * renderer over every note and is asked for twice a frame - once to measure the panel and
          * again to draw it - where the notes only change when the chart is re-solved. The balance
@@ -514,12 +534,6 @@ public class FlowchartScreen extends ModularScreen {
         /** Header plus, when the section is open, one line per body row. */
         private int sectionHeight(@Nullable final SummarySection section, final int bodyLines) {
             return SECTION_H + (sectionOpen(section) ? bodyLines * LINE_H : 0) + SECTION_END_PAD;
-        }
-
-        private static double operationsOf(final BalanceResult br, final Node node) {
-            final NodeBalance nb = br.nodeBalances()
-                .get(node.id);
-            return nb == null ? 0 : nb.operations();
         }
 
         /**
@@ -609,9 +623,8 @@ public class FlowchartScreen extends ModularScreen {
 
         /**
          * Solver messages, word-wrapped to the summary width at the item text scale and coloured
-         * per severity. Every message shares one section - the tag on the front says how loud it
-         * is, which is finer than a section heading can be and does not hide errors behind a fold
-         * the user closed for warnings.
+         * per severity. One section for every severity: the tag on the front is finer than a
+         * section heading can be, and cheaper than a fold per severity.
          */
         private void wrapNotes(final BalanceResult br) {
             if (br == wrappedFor) return;
@@ -632,15 +645,11 @@ public class FlowchartScreen extends ModularScreen {
             return switch (severity) {
                 case ERROR -> PlannhColors.ACCENT_RED.getColor();
                 case WARN -> PlannhColors.ACCENT_AMBER.getColor();
-                case INFO -> PlannhColors.TEXT_MUTED.getColor();
+                case INFO -> PlannhColors.ACCENT_BLUE.getColor();
             };
         }
 
-        /**
-         * The loudest thing the solver said, which is what the heading has to carry: an alarming
-         * bar over three informational notes cries wolf, and the next real warning reads as more
-         * of the same.
-         */
+        /** The loudest thing the solver said: an alarming bar over three asides cries wolf. */
         private static AutoBalancer.Severity loudest(final BalanceResult br) {
             AutoBalancer.Severity worst = AutoBalancer.Severity.INFO;
             for (final String note : br.notes()) {
@@ -648,17 +657,6 @@ public class FlowchartScreen extends ModularScreen {
                 if (severity.ordinal() < worst.ordinal()) worst = severity;
             }
             return worst;
-        }
-
-        /** Section bar behind the messages heading: the alarming one only when something is wrong. */
-        private static int loudestHeaderColor(final AutoBalancer.Severity worst) {
-            return worst == AutoBalancer.Severity.INFO ? PlannhColors.SECTION_OPS.getColor()
-                : PlannhColors.SECTION_WARN.getColor();
-        }
-
-        /** Heading text, which unlike a message line has to stay legible against its own bar. */
-        private static int loudestTitleColor(final AutoBalancer.Severity worst) {
-            return worst == AutoBalancer.Severity.INFO ? PlannhColors.ACCENT_BLUE.getColor() : severityColor(worst);
         }
 
         @Override
@@ -742,8 +740,9 @@ public class FlowchartScreen extends ModularScreen {
                     SummarySection.MESSAGES,
                     "Solver Messages (" + br.notes()
                         .size() + ")",
-                    loudestHeaderColor(worst),
-                    loudestTitleColor(worst));
+                    worst == AutoBalancer.Severity.INFO ? PlannhColors.SECTION_OPS.getColor()
+                        : PlannhColors.SECTION_WARN.getColor(),
+                    severityColor(worst));
                 if (sectionOpen(SummarySection.MESSAGES)) {
                     for (final MessageLine line : wrappedMessages) {
                         GuiDraw.drawText(line.text(), ITEM_TEXT_X, ly, NOTE_SCALE, line.color(), false);
@@ -843,10 +842,9 @@ public class FlowchartScreen extends ModularScreen {
         }
 
         /**
-         * A section heading, clickable when the section folds. The fold marker doubles as the
-         * affordance: a section whose body is off still keeps its header, or there would be
-         * nothing left to click to get it back. A null section draws the bar alone - no marker
-         * and no hit area, because there is nothing to toggle.
+         * A section heading, clickable when the section folds. A folded section keeps its header,
+         * or there would be nothing left to click to get it back; a null section draws the bar
+         * alone, with no marker and no hit area.
          */
         private int drawSectionHeader(final int ly, final int w, @Nullable final SummarySection section,
             final String title, final int headerColor, final int titleColor) {
@@ -877,13 +875,7 @@ public class FlowchartScreen extends ModularScreen {
                 PlannhColors.ACCENT_BLUE.getColor());
             if (!sectionOpen(SummarySection.MACHINE_COUNTS)) return ly + SECTION_END_PAD;
 
-            // Busiest machine first: on a chart with thirty nodes the list is read for what to
-            // build most of, and the tail is the part nobody scrolls to.
-            final List<Node> byCount = new ArrayList<>(graph().getNodes());
-            byCount.sort(
-                Comparator.comparingDouble((final Node n) -> operationsOf(br, n))
-                    .reversed());
-            for (final Node node : byCount) {
+            for (final Node node : nodesByOperations(br)) {
                 final NodeBalance nb = br.nodeBalances()
                     .get(node.id);
                 if (nb == null || nb.operations() <= 0) continue;

@@ -144,11 +144,9 @@ public final class BalanceView {
     }
 
     /**
-     * Reading order for one decision's answers: the one on screen first, because it is what the
-     * chart is currently doing and every other row is read against it. The rest are what could
-     * replace it, sorted to be compared rather than to argue - deliberately NOT the solver's
-     * preference order - with what they would bring in ahead of what they would let go of, each
-     * ascending by how much crosses.
+     * Reading order for one decision's answers: the one on screen first, since every other row is
+     * read against it, then the rest as a list of amounts - imports before surpluses, each
+     * ascending. Deliberately not the solver's preference order.
      */
     private static List<Alternative> sortedRows(final List<Alternative> options) {
         final List<Alternative> sorted = new ArrayList<>(options);
