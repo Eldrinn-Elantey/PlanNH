@@ -1,6 +1,9 @@
 package com.sbancuz.plannh;
 
 import java.io.File;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 
 import net.minecraftforge.common.config.Configuration;
 
@@ -8,6 +11,46 @@ public final class Config {
 
     /** Dev diagnostic: log a headless repro of every arrow-routing recompute. */
     public static boolean debugRouteDump = false;
+
+    /**
+     * Drops the summary's Machine Counts section entirely rather than folding it. Separate from the
+     * fold state because they answer different questions: a fold is "not right now" and lives per
+     * save, this is "never show me this" and lives with the install.
+     */
+    public static boolean hideMachineCountsSection = false;
+
+    /**
+     * Ingredients nobody plumbs. The wiring diagnostics exist to catch an edge the user meant to
+     * draw, and a chart taking water from outside while another machine happens to make some is
+     * not that - it is how everyone builds. Names, not registry ids: this is a nuisance filter the
+     * user edits by hand, and the panel already talks to them in display names.
+     */
+    public static final String[] DEFAULT_FREE_INGREDIENTS = { "Water" };
+
+    /** {@link #DEFAULT_FREE_INGREDIENTS} folded to lower case for lookup. */
+    private static Set<String> freeIngredients = lowercased(DEFAULT_FREE_INGREDIENTS);
+
+    /** Whether wiring diagnostics should stay quiet about this ingredient. */
+    public static boolean isFreeIngredient(final String displayName) {
+        return freeIngredients.contains(
+            displayName.trim()
+                .toLowerCase(Locale.ROOT));
+    }
+
+    /** Replaces the free list. Names are matched case- and whitespace-insensitively from here on. */
+    public static void setFreeIngredients(final String... names) {
+        freeIngredients = lowercased(names);
+    }
+
+    private static Set<String> lowercased(final String[] names) {
+        final Set<String> set = new HashSet<>();
+        for (final String name : names) {
+            set.add(
+                name.trim()
+                    .toLowerCase(Locale.ROOT));
+        }
+        return set;
+    }
 
     /**
      * How long the balancer is allowed to look for a better answer, as a percentage of the tuned
@@ -42,6 +85,25 @@ public final class Config {
             "debug",
             false,
             "Log a replayable dump of the arrow-routing input on every route recompute");
+
+        hideMachineCountsSection = configuration.getBoolean(
+            "hideMachineCountsSection",
+            "gui",
+            false,
+            "Leave the Machine Counts section (per-machine operation counts, and the ops/cycle"
+                + " totals) out of the summary panel altogether, instead of folding it away");
+
+        setFreeIngredients(
+            configuration
+                .get(
+                    "solver",
+                    "freeIngredients",
+                    DEFAULT_FREE_INGREDIENTS,
+                    "Ingredients the solver never suggests wiring up. Display names, case"
+                        + " insensitive. Anything effectively free in the pack belongs here:"
+                        + " otherwise every chart that takes water from outside reports a missing"
+                        + " edge to whatever else happens to produce it.")
+                .getStringList());
 
         solverEffortPercent = configuration.getInt(
             "solverEffortPercent",

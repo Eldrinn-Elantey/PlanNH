@@ -173,6 +173,38 @@ public final class AutoBalancer {
     /** Suffix of every wiring-diagnostic note; tests key on it. */
     public static final String MISSING_EDGE = "missing an edge?";
 
+    /**
+     * How loud a solver message is. Carried as a tag on the front of the message rather than
+     * beside it, because notes travel as plain strings from the model through the balance result
+     * to the panel, and a parallel field would have to be threaded through every one of them.
+     */
+    public enum Severity {
+
+        /** The chart has no numbers: nothing was solved. */
+        ERROR,
+        /** Solved, but on something the user probably did not mean - a pin missed, an edge absent. */
+        WARN,
+        /** The solver saying what it did. Nothing to fix. */
+        INFO;
+
+        public String tag() {
+            return "[" + name() + "] ";
+        }
+
+        /** {@code message} with this severity's tag on the front. */
+        public String on(final String message) {
+            return tag() + message;
+        }
+
+        /** The severity {@code note} was raised at; untagged notes are informational. */
+        public static Severity of(final String note) {
+            for (final Severity severity : values()) {
+                if (note.startsWith(severity.tag())) return severity;
+            }
+            return INFO;
+        }
+    }
+
     /** A port on a specific machine. {@code input} distinguishes the two port lists. */
     public record PortRef(UUID nodeId, int portIndex, boolean input) {
 
@@ -527,14 +559,17 @@ public final class AutoBalancer {
                 .thenComparing(Alternative::key));
         boolean complete = skipped == 0;
         if (options.size() > MAX_ALT_OPTIONS) {
-            notes.add("showing the closest " + MAX_ALT_OPTIONS + " of " + options.size() + " workable answers");
+            notes.add(
+                Severity.INFO
+                    .on("showing the closest " + MAX_ALT_OPTIONS + " of " + options.size() + " workable answers"));
             options.subList(MAX_ALT_OPTIONS, options.size())
                 .clear();
             complete = false;
         }
         if (skipped > 0) {
             notes.add(
-                "stopped after " + evaluated
+                Severity.INFO.tag() + "stopped after "
+                    + evaluated
                     + " combinations, so there may be more than the ones listed ("
                     + skipped
                     + " not tried)");
@@ -594,7 +629,9 @@ public final class AutoBalancer {
     private static Attempt applyChoice(final FlowModel ctx, final Run run, final ChoiceKey choice) {
         final Set<Integer> target = ctx.resolve(choice);
         if (target == null) {
-            ctx.notes.add("the saved excess choice no longer fits this chart - showing the solver's own answer");
+            ctx.notes.add(
+                Severity.WARN
+                    .on("the saved excess choice no longer fits this chart - showing the solver's own answer"));
             return run.attempt;
         }
         if (target.equals(run.attempt.support)) return run.attempt;
@@ -603,7 +640,9 @@ public final class AutoBalancer {
         if (alt == null || alt.support.size() != run.attempt.support.size()) {
             // Gate count is the one bar a choice may not fall below: it is a real optimum, where
             // everything after it is a preference the user is entitled to disagree with.
-            ctx.notes.add("the saved excess choice needs more gates than the solver's answer, so it was dropped");
+            ctx.notes.add(
+                Severity.WARN
+                    .on("the saved excess choice needs more gates than the solver's answer, so it was dropped"));
             return run.attempt;
         }
         // Deliberately no note when the pick leans on the outside more than the default would have:
@@ -708,7 +747,9 @@ public final class AutoBalancer {
         }
         final List<String> notes = certified ? List.of()
             : List.of(
-                "gate count " + s1Support.size() + " is minimal but not certified optimal (exact search over budget)");
+                Severity.INFO.on(
+                    "gate count " + s1Support.size()
+                        + " is minimal but not certified optimal (exact search over budget)"));
         // The cap must cover what stage 1 actually used, not what its support reports: a gate
         // carrying flow too small to register still costs its weight, and capping below it leaves
         // stage 2 infeasible on a chart stage 1 has just solved.

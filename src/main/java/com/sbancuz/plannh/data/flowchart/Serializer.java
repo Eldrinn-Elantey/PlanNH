@@ -20,7 +20,6 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
@@ -98,11 +97,14 @@ public final class Serializer {
         root.addProperty("summaryY", set.summaryY);
         root.addProperty("summaryCollapsed", set.summaryCollapsed);
         root.addProperty("summaryMode", set.summaryMode.name());
-        final JsonArray collapsedSections = new JsonArray();
-        for (final SummarySection section : set.collapsedSummarySections) {
-            collapsedSections.add(new JsonPrimitive(section.name()));
+        // Every section, not just the folded ones: a section this save has never heard of has to
+        // be distinguishable from one the user deliberately left open, or adding a section would
+        // silently unfold it for everyone who had already saved.
+        final JsonObject sectionFolds = new JsonObject();
+        for (final SummarySection section : SummarySection.values()) {
+            sectionFolds.addProperty(section.name(), set.collapsedSummarySections.contains(section));
         }
-        root.add("summaryCollapsedSections", collapsedSections);
+        root.add("summarySectionFolds", sectionFolds);
         final JsonArray arr = new JsonArray();
         for (final SlotSet.Slot slot : set.slots) {
             final JsonObject slotObj = new JsonObject();
@@ -136,14 +138,23 @@ public final class Serializer {
                         .getAsString());
             } catch (final IllegalArgumentException ignored) {}
         }
-        // Absent key keeps the defaults, so saves written before sections were foldable open with
-        // the operation list folded like a fresh install.
-        if (root.has("summaryCollapsedSections")) {
-            set.collapsedSummarySections.clear();
-            for (final JsonElement elem : root.getAsJsonArray("summaryCollapsedSections")) {
+        // Read section by section over the defaults rather than replacing them: an unmentioned
+        // section is one the save predates, and it keeps the fold a fresh install would give it.
+        if (root.has("summarySectionFolds")) {
+            for (final var fold : root.getAsJsonObject("summarySectionFolds")
+                .entrySet()) {
+                final SummarySection section;
                 try {
-                    set.collapsedSummarySections.add(SummarySection.valueOf(elem.getAsString()));
-                } catch (final IllegalArgumentException ignored) {}
+                    section = SummarySection.valueOf(fold.getKey());
+                } catch (final IllegalArgumentException ignored) {
+                    continue; // a section this build has dropped
+                }
+                if (fold.getValue()
+                    .getAsBoolean()) {
+                    set.collapsedSummarySections.add(section);
+                } else {
+                    set.collapsedSummarySections.remove(section);
+                }
             }
         }
         final JsonArray arr = root.getAsJsonArray("slots");

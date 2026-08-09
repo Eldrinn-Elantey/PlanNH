@@ -1,6 +1,7 @@
 package com.sbancuz.plannh.data.flowchart;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -110,32 +111,71 @@ public final class BalanceView {
     }
 
     /**
-     * The answers this chart could equally well have had, default first, each marked with what it
-     * gives up. Rebuilds every row and group from the enumeration behind {@link Graph#alternatives()},
-     * so callers drawing every frame want {@link Graph#choices()} rather than this.
+     * The answers this chart could equally well have had, each marked with what it gives up and
+     * which one is on screen. Rebuilds every row and group from the enumeration behind
+     * {@link Graph#alternatives()}, so callers drawing every frame want {@link Graph#choices()}
+     * rather than this. Row order within a decision is {@link #sortedRows}.
      */
     public static Choices choices(final Graph graph) {
         final Alternatives alternatives = graph.alternatives();
         // Grouped by the decision each option answers, in the order the solver emitted them, so a
         // chart posing two questions shows two short lists instead of one list of everything.
-        final Map<AutoBalancer.PortRef, List<Choice>> byDecision = new LinkedHashMap<>();
+        final Map<AutoBalancer.PortRef, List<Alternative>> byDecision = new LinkedHashMap<>();
         final Map<AutoBalancer.PortRef, String> headings = new LinkedHashMap<>();
         for (final Alternative option : alternatives.options()) {
-            final Choice row = new Choice(option.key(), describe(graph, option), reasonOf(option), option.isCurrent());
             byDecision.computeIfAbsent(option.replaces(), k -> new ArrayList<>())
-                .add(row);
+                .add(option);
             if (option.isCurrent()) headings.put(option.replaces(), describe(graph, option));
         }
         final List<Group> groups = new ArrayList<>();
-        for (final Map.Entry<AutoBalancer.PortRef, List<Choice>> entry : byDecision.entrySet()) {
+        for (final Map.Entry<AutoBalancer.PortRef, List<Alternative>> entry : byDecision.entrySet()) {
             // A decision with only its current answer under it is not a decision. Showing it would
             // put a heading above a row that repeats the heading, and imply a choice that is not
             // being offered.
             if (entry.getValue()
                 .size() < 2) continue;
-            groups.add(new Group(headings.getOrDefault(entry.getKey(), ""), List.copyOf(entry.getValue())));
+            final List<Choice> rows = new ArrayList<>();
+            for (final Alternative option : sortedRows(entry.getValue())) {
+                rows.add(new Choice(option.key(), describe(graph, option), reasonOf(option), option.isCurrent()));
+            }
+            groups.add(new Group(headings.getOrDefault(entry.getKey(), ""), List.copyOf(rows)));
         }
         return new Choices(List.copyOf(groups), alternatives.complete(), alternatives.notes());
+    }
+
+    /**
+     * Reading order for one decision's answers: the one on screen first, because it is what the
+     * chart is currently doing and every other row is read against it. The rest are what could
+     * replace it, sorted to be compared rather than to argue - deliberately NOT the solver's
+     * preference order - with what they would bring in ahead of what they would let go of, each
+     * ascending by how much crosses.
+     */
+    private static List<Alternative> sortedRows(final List<Alternative> options) {
+        final List<Alternative> sorted = new ArrayList<>(options);
+        sorted.sort(
+            Comparator.comparing((final Alternative o) -> !o.isCurrent())
+                .thenComparing(o -> !isImport(o))
+                .thenComparingDouble(BalanceView::crossingRate)
+                .thenComparing(Alternative::key));
+        return sorted;
+    }
+
+    /** Whether this answer brings the ingredient in, as opposed to letting a surplus out. */
+    private static boolean isImport(final Alternative option) {
+        return !option.externals()
+            .isEmpty() && option.externals()
+                .get(0)
+                .port()
+                .input();
+    }
+
+    /** How much crosses the boundary under this answer, summed over the ports it uses. */
+    private static double crossingRate(final Alternative option) {
+        double rate = 0;
+        for (final External e : option.externals()) {
+            rate += e.ratePerSecond();
+        }
+        return rate;
     }
 
     /** Whether there is anything to choose between - cheap enough to ask every frame. */

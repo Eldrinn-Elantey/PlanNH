@@ -21,17 +21,15 @@ class SummarySectionPersistenceTest {
     }
 
     @Test
-    void collapsedSectionsSurviveEncodeDecode() {
+    void foldedSectionsSurviveEncodeDecode() {
         final SlotSet set = oneSlot();
         set.collapsedSummarySections.clear();
-        set.collapsedSummarySections.add(SummarySection.NOTES);
-        set.collapsedSummarySections.add(SummarySection.PROPERTIES);
+        set.collapsedSummarySections.add(SummarySection.MESSAGES);
+        set.collapsedSummarySections.add(SummarySection.STATISTICS);
 
         final SlotSet decoded = Serializer.decodeSlotSet(Serializer.encode(set));
 
-        assertEquals(
-            EnumSet.of(SummarySection.NOTES, SummarySection.PROPERTIES),
-            decoded.collapsedSummarySections);
+        assertEquals(EnumSet.of(SummarySection.MESSAGES, SummarySection.STATISTICS), decoded.collapsedSummarySections);
     }
 
     /** An explicitly empty set is "everything open", not "never saved". */
@@ -47,12 +45,32 @@ class SummarySectionPersistenceTest {
 
     /** Saves written before sections were foldable open like a fresh install. */
     @Test
-    void savesWithoutTheKeyKeepTheDefault() {
+    void savesWithoutTheKeyKeepTheDefaults() {
         final String json = Serializer.encode(oneSlot())
-            .replace("\"summaryCollapsedSections\"", "\"unusedKey\"");
+            .replace("\"summarySectionFolds\"", "\"unusedKey\"");
 
         final SlotSet decoded = Serializer.decodeSlotSet(json);
 
-        assertEquals(EnumSet.of(SummarySection.OPERATIONS), decoded.collapsedSummarySections);
+        assertEquals(new SlotSet().collapsedSummarySections, decoded.collapsedSummarySections);
+    }
+
+    /**
+     * The reason the folds are stored section by section: a save written before a section existed
+     * must not drag that section open, or every new section arrives expanded for existing users.
+     */
+    @Test
+    void aSectionTheSaveNeverHeardOfKeepsItsDefault() {
+        final SlotSet set = oneSlot();
+        set.collapsedSummarySections.clear();
+        set.collapsedSummarySections.add(SummarySection.STATISTICS);
+        final String json = Serializer.encode(set)
+            .replace("\"" + SummarySection.HELP.name() + "\"", "\"SECTION_FROM_A_LATER_BUILD\"");
+
+        final SlotSet decoded = Serializer.decodeSlotSet(json);
+
+        assertEquals(
+            EnumSet.of(SummarySection.STATISTICS, SummarySection.HELP),
+            decoded.collapsedSummarySections,
+            "the unmentioned section keeps the default fold, the mentioned ones keep the save's");
     }
 }

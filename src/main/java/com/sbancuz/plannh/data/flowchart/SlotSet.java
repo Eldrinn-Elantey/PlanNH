@@ -31,8 +31,9 @@ public class SlotSet {
     public int summaryY = DEFAULT_SUMMARY_Y;
     public boolean summaryCollapsed = false;
     public SummaryMode summaryMode = SummaryMode.CYCLES;
-    /** Sections folded away in the summary panel; the per-node operation list starts folded. */
-    public final EnumSet<SummarySection> collapsedSummarySections = EnumSet.of(SummarySection.OPERATIONS);
+    /** Sections folded away in the summary panel: the reference material, not the answer. */
+    public final EnumSet<SummarySection> collapsedSummarySections = EnumSet
+        .of(SummarySection.MACHINE_COUNTS, SummarySection.STATISTICS, SummarySection.MESSAGES, SummarySection.HELP);
 
     /** Clamps activeSlot and guarantees a slot exists. */
     private Slot activeSlot() {

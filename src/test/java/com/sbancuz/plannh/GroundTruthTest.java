@@ -2,6 +2,7 @@ package com.sbancuz.plannh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.HashMap;
@@ -334,11 +335,42 @@ class GroundTruthTest {
             terminalRate(chart, s.terminalInputs(), "heavy naquadah fuel"),
             EPS,
             "fusion's heavy arrives via its free terminal");
-        assertTrue(
-            s.notes()
-                .stream()
-                .anyMatch(n -> n.contains(AutoBalancer.MISSING_EDGE)),
-            "the missing-edge diagnostic must fire, got notes: " + s.notes());
+        final String diagnostic = s.notes()
+            .stream()
+            .filter(n -> n.contains(AutoBalancer.MISSING_EDGE))
+            .findFirst()
+            .orElse(null);
+        assertNotNull(diagnostic, "the missing-edge diagnostic must fire, got notes: " + s.notes());
+        // The note is what the user acts on: it has to name the ingredient to point at, and carry
+        // the severity the panel colours it by. Informational, not a warning - importing something
+        // the chart also makes is how most charts are drawn.
+        assertEquals(
+            AutoBalancer.Severity.INFO,
+            AutoBalancer.Severity.of(diagnostic),
+            "raised as an observation: " + diagnostic);
+        assertTrue(diagnostic.contains("heavy naquadah fuel"), "names the ingredient: " + diagnostic);
+    }
+
+    @Test
+    void anIngredientOnTheFreeListRaisesNoWiringDiagnostic() {
+        // Same chart and same missing edge as above. Water is the real case - a chart pulling it
+        // from outside while some machine makes a little is not a mistake anyone wants told about -
+        // and the list is the pack's answer to which ingredients those are.
+        Config.setFreeIngredients("heavy naquadah fuel");
+        try {
+            final LoadedChart chart = GtnhFlowLoader.load("mk1_tiberium");
+            GtnhFlowLoader.removeEdgesInto(chart, chart.machine(0), 0);
+
+            final Solution s = solve(chart);
+
+            assertTrue(
+                s.notes()
+                    .stream()
+                    .noneMatch(n -> n.contains(AutoBalancer.MISSING_EDGE)),
+                "free ingredients are wired up by hand or not at all, got notes: " + s.notes());
+        } finally {
+            Config.setFreeIngredients(Config.DEFAULT_FREE_INGREDIENTS);
+        }
     }
 
     @Test
