@@ -357,6 +357,28 @@ class GroundTruthTest {
     }
 
     @Test
+    void anInfeasibleModelSaysSoRatherThanBlamingTheBudget() {
+        // A negative extent pin has no solution at all: the port rows read
+        // sum(flows) + external = extent * qty, and both sides of the left are non-negative, so a
+        // negative right-hand side is unreachable even with every gate open. The point is the
+        // wording - ojAlgo's state has to reach the message, because "no solution within budget"
+        // over a model that is simply infeasible sends the reader looking at the wrong thing.
+        final LoadedChart chart = GtnhFlowLoader.load("loopGraph");
+        final Node pinned = chart.machine(0);
+        final Result result = AutoBalancer.solve(chart.graph(), Map.of(pinned.id, -1.0));
+
+        assertFalse(result.isSuccess(), "a negative extent pin cannot be solved");
+        assertTrue(
+            result.failure()
+                .contains("INFEASIBLE"),
+            () -> "the solver's own verdict must survive into the message: " + result.failure());
+        assertFalse(
+            result.failure()
+                .contains("budget"),
+            () -> "and it must not be blamed on the budget: " + result.failure());
+    }
+
+    @Test
     void wellWiredCharts_produceNoMissingEdgeNotes() {
         // The diagnostic must not cry wolf: fully wired charts (including ones with legitimate
         // gated sources like loopGraph and legitimate terminal imports like light_fuel's oil)

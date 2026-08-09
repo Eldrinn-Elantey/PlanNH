@@ -688,7 +688,7 @@ public final class AutoBalancer {
         // enough for branch-and-bound. Large charts keep the filter answer, uncertified.
         final StageSolve filter = deletionFilter(ctx, floors);
         if (filter == null) {
-            return Attempt.failed("stage 1 (gate count) found no feasible support");
+            return Attempt.failed("stage 1 (gate count) " + ctx.rejection);
         }
         // Everything with a binary in it is sized from the filter's own solution: it is the first
         // point that exists, and every later stage lives at the same scale.
@@ -726,7 +726,7 @@ public final class AutoBalancer {
             certified = false;
         }
         if (s2 == null) {
-            return Attempt.failed("stage 2 (external quantity) found no solution within budget");
+            return Attempt.failed("stage 2 (external quantity) " + ctx.rejection);
         }
 
         // Ties at (count, quantity) are resolved by stage 3's objective: re-run stage 3 for each
@@ -778,7 +778,7 @@ public final class AutoBalancer {
             }
         }
         if (best == null) {
-            return Attempt.failed("stage 3 (internal flow) found no solution within budget");
+            return Attempt.failed("stage 3 (internal flow) " + ctx.rejection);
         }
         return Attempt.of(best, bestSupport, certified, notes);
     }
@@ -882,7 +882,7 @@ public final class AutoBalancer {
         }
         final Optimisation.Result result = h.model()
             .minimise();
-        if (!isUsable(result)) return null;
+        if (!isUsable(result)) return rejected(ctx, result);
         return StageSolve.from(ctx, h);
     }
 
@@ -931,7 +931,7 @@ public final class AutoBalancer {
             final Optimisation.Result result = h.model()
                 .minimise();
             final boolean withinValve = System.currentTimeMillis() - solveStart < h.model().options.time_abort;
-            if (!isUsable(result)) return null;
+            if (!isUsable(result)) return rejected(ctx, result);
             if (pressesCap(h, bigM)) {
                 bigM *= 10;
                 continue;
@@ -947,6 +947,7 @@ public final class AutoBalancer {
                 withinValve && result.getState()
                     .isOptimal());
         }
+        ctx.rejection = "kept pressing the big-M gate cap after " + MAX_M_GROWTHS + " growths";
         return null;
     }
 
@@ -957,7 +958,7 @@ public final class AutoBalancer {
         LEAST_EXCESS.objective(ctx, h);
         final Optimisation.Result result = h.model()
             .minimise();
-        if (!isUsable(result)) return null;
+        if (!isUsable(result)) return rejected(ctx, result);
         return StageSolve.from(ctx, h);
     }
 
@@ -979,13 +980,14 @@ public final class AutoBalancer {
             addNoGoodCuts(h, cuts);
             final Optimisation.Result result = h.model()
                 .minimise();
-            if (!isUsable(result)) return null;
+            if (!isUsable(result)) return rejected(ctx, result);
             if (pressesCap(h, bigM)) {
                 bigM *= 10;
                 continue;
             }
             return StageSolve.from(ctx, h);
         }
+        ctx.rejection = "kept pressing the big-M gate cap after " + MAX_M_GROWTHS + " growths";
         return null;
     }
 
@@ -1004,7 +1006,7 @@ public final class AutoBalancer {
         LEAST_FLOW.objective(ctx, h);
         final Optimisation.Result result = h.model()
             .minimise();
-        if (!isUsable(result)) return null;
+        if (!isUsable(result)) return rejected(ctx, result);
         return StageSolve.from(ctx, h);
     }
 
@@ -1070,6 +1072,17 @@ public final class AutoBalancer {
     private static boolean isUsable(final Optimisation.Result result) {
         return result.getState()
             .isFeasible();
+    }
+
+    /**
+     * Records what the solver actually said and yields the null every stage reads as "nothing here".
+     * The state does not separate a model with no solution from a search that gave up looking -
+     * ojAlgo returns INFEASIBLE for both - so whether the budget was spent goes into the reason too.
+     */
+    private static StageSolve rejected(final FlowModel ctx, final Optimisation.Result result) {
+        ctx.rejection = (ctx.budget.expired() ? "ran out of solve budget, solver state "
+            : "found no solution, solver state ") + result.getState();
+        return null;
     }
 
     private static boolean pressesCap(final Handles h, final double bigM) {

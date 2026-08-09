@@ -69,6 +69,12 @@ final class FlowModel {
     int[] portComponent; // connected port index -> ingredient component root
     boolean anyPin;
     Budget budget;
+    /**
+     * Why the last model this solve rejected produced nothing usable. Recorded where the rejection
+     * happens, because by the time a stage reports failure the result that would explain it is gone -
+     * and ojAlgo spells an infeasible model and a search that gave up the same way.
+     */
+    String rejection = "found no solution";
     /** Fixed once the gates are known, and read per gate while building every MILP. */
     private double[] gateWeights;
     final List<String> notes = new ArrayList<>();
@@ -917,7 +923,11 @@ final class FlowModel {
             final double[] extents = values(h.extentVars());
             final double[] flows = values(h.flowVars());
             final double[] externals = values(h.extVars());
-            if (ctx.validate(extents, flows, externals) != null) return null;
+            final String residual = ctx.validate(extents, flows, externals);
+            if (residual != null) {
+                ctx.rejection = "returned a point that does not conserve: " + residual;
+                return null;
+            }
             return new StageSolve(ctx, extents, flows, externals, provenOptimal);
         }
 

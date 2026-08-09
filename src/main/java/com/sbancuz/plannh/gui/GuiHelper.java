@@ -38,9 +38,17 @@ public final class GuiHelper {
      * not expressible there.
      */
     public static String formatRate(final float rate) {
-        // G, not B: fluid amounts already use B for buckets, and that is how players read it.
-        if (rate >= 1000000000f) return String.format("%.1fG", rate / 1000000000f);
-        if (rate >= 1000000f) return String.format("%.1fM", rate / 1000000f);
+        // Suffixes and base match NEI's and AE2's ReadableNumberConverter (both "kMGTPE" over 1000),
+        // which is what a player reads everywhere else in the pack. G rather than B also keeps a
+        // billion apart from the B fluid amounts already use for buckets.
+        //
+        // The k step is deliberately not taken: 1200/s is a rate a reader does arithmetic with, and
+        // 1.2k/s costs two digits of it for a character of width nothing here needs.
+        if (rate >= 1e18f) return String.format("%.1fE", rate / 1e18f);
+        if (rate >= 1e15f) return String.format("%.1fP", rate / 1e15f);
+        if (rate >= 1e12f) return String.format("%.1fT", rate / 1e12f);
+        if (rate >= 1e9f) return String.format("%.1fG", rate / 1e9f);
+        if (rate >= 1e6f) return String.format("%.1fM", rate / 1e6f);
         if (rate >= 1000f) return String.format("%.0f", rate);
         if (rate >= 1f) return String.format("%.2f", rate);
         return trimTrailingZeros(String.format("%.5f", rate));
