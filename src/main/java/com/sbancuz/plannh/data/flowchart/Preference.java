@@ -2,6 +2,7 @@ package com.sbancuz.plannh.data.flowchart;
 
 import java.util.List;
 import java.util.Set;
+import java.util.function.IntToDoubleFunction;
 
 import org.ojalgo.optimisation.Expression;
 import org.ojalgo.optimisation.Variable;
@@ -11,20 +12,17 @@ import com.sbancuz.plannh.data.flowchart.FlowModel.Handles;
 import com.sbancuz.plannh.data.flowchart.FlowModel.StageSolve;
 
 /**
- * One rule for choosing between answers that every rule before it found equally good.
- *
- * <p>
- * A chart normally has many balanced solutions and no fact that separates them, so AUTO ranks them
- * by an ordered list of preferences, each optimized subject to the optima of the ones before it. A
+ * One rule for choosing between answers that every rule before it found equally good. A chart
+ * normally has many balanced solutions and no fact that separates them, so AUTO ranks them by an
+ * ordered list of preferences, each optimized subject to the optima of the ones before it. A
  * preference is fully described by which family of model variables carries its cost and what each
- * of those variables is worth, because everything the pipeline does with one - make it an
- * objective, read it off a solved point, hold it while a later preference breaks the remaining ties
- * - follows from that pair.
+ * of those is worth: making it an objective, reading it off a solved point and holding it while a
+ * later preference breaks the remaining ties all follow from that pair.
  *
  * <p>
- * {@link #ORDER} is the single authority for that sequence: the solve chains its caps in this
- * order, {@link AutoBalancer} explains a rejected answer by the first entry that separates it, and
- * the choices panel sorts by the same index. Adding a heuristic is one entry here.
+ * {@link #ORDER} is the single authority for the sequence - the solve chains its caps in it,
+ * {@link AutoBalancer} names the first entry that separates a rejected answer, and the choices
+ * panel sorts by the same index. Adding a heuristic is one entry here.
  */
 record Preference(String name, Family family, Weight weight, Rank whenWorse, Rank whenBetter) {
 
@@ -45,12 +43,10 @@ record Preference(String name, Family family, Weight weight, Rank whenWorse, Ran
     }
 
     /**
-     * AUTO's answer, in the order it prefers things.
-     *
-     * <p>
-     * Only the first two are decided combinatorially - they are the ones that choose WHICH gates
-     * open, which needs binaries - and {@link #gateWeights} folds them into the single objective the
-     * gate search minimizes. The rest run as plain LPs over the support that search settles on.
+     * AUTO's answer, in the order it prefers things. Only the first two are decided
+     * combinatorially - they choose WHICH gates open, which needs binaries - and
+     * {@link #gateWeights} folds them into one objective. The rest are plain LPs over the support
+     * that search settles on.
      */
     static final List<Preference> ORDER = List.of(
         new Preference("fewest gates", Family.GATES, (model, gate) -> 1.0, null, null),
@@ -65,13 +61,10 @@ record Preference(String name, Family family, Weight weight, Rank whenWorse, Ran
         new Preference("least internal flow", Family.FLOWS, (model, edge) -> 1.0, Rank.MOVES_MORE, Rank.MOVES_LESS));
 
     /**
-     * Smallest unit the packed gate objective may use.
-     *
-     * <p>
-     * The packing only needs to exceed the gate count to be lexicographic, but ojAlgo does not
-     * solve a small objective range as reliably as a large one: dropping the unit to the gate count
-     * alone moves 230_platline off its answer, and the corpus only stops changing somewhere between
-     * 256 and 512. The floor keeps an octave beyond that measured edge.
+     * Smallest unit the packed gate objective may use. The packing only needs to exceed the gate
+     * count to be lexicographic, but ojAlgo does not solve a small objective range as reliably as a
+     * large one - the corpus stops changing somewhere between 256 and 512, and this keeps an octave
+     * beyond that measured edge.
      */
     private static final double WEIGHT_FLOOR = 1024.0;
 
@@ -96,14 +89,10 @@ record Preference(String name, Family family, Weight weight, Rank whenWorse, Ran
 
     /**
      * One weight per gate, packing every {@link Family#GATES} preference into a single objective
-     * that is lexicographic by construction: each level is worth more than every later level put
-     * together can ever total, because no level can charge more than 1 per gate and there are only
-     * {@code gates} of them.
-     *
-     * <p>
-     * Derived rather than chosen, so the two preferences cannot silently stop dominating one another
-     * on a chart big enough - which is what a hand-picked pair of constants did once the gate count
-     * approached it.
+     * that is lexicographic by construction: no level can charge more than 1 per gate and there are
+     * only {@code gates} of them, so each level outweighs everything after it. Derived from the gate
+     * count rather than chosen, so a chart big enough cannot make one level stop dominating the
+     * next.
      */
     static double[] gateWeights(final FlowModel model) {
         final List<Preference> levels = ORDER.subList(0, GATE_LEVELS);
@@ -135,9 +124,18 @@ record Preference(String name, Family family, Weight weight, Rank whenWorse, Ran
 
     /** What this preference costs for a gate support, without needing a solved point. */
     double costOf(final FlowModel model, final Set<Integer> support) {
+        return costOf(support, gate -> weight.of(model, gate));
+    }
+
+    /**
+     * What a gate support costs under any per-gate weighting. One preference's own weight and the
+     * packed lexicographic weight of {@link #gateWeights} are the same sum over different numbers,
+     * so they share the sum rather than each keeping a copy of it to drift from.
+     */
+    static double costOf(final Set<Integer> support, final IntToDoubleFunction weightOf) {
         double total = 0;
         for (final int gate : support) {
-            total += weight.of(model, gate);
+            total += weightOf.applyAsDouble(gate);
         }
         return total;
     }

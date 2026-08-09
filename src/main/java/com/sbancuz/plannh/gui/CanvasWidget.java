@@ -460,25 +460,10 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
     /** Below this zoom the labels are unreadable, so the chips are only clutter. */
     private static final float CHIP_MIN_ZOOM = 0.45f;
 
-    /**
-     * Stub source and sink markers for everything crossing the chart's boundary: what is imported,
-     * what is thrown away, and what simply arrives or leaves as a terminal.
-     *
-     * <p>
-     * Derived from the solve, never stored - they are not {@link Node}s, take no part in layout or
-     * routing, and vanish with the solution that produced them. Their whole job is to make
-     * "0.28571/s Cauldron" and "2.97/s Charcoal we could not avoid making" look different on
-     * screen, which the netted summary alone cannot do.
-     */
-    /**
-     * World-space room to keep clear beside each node for its boundary chips, {@code {left, right}}
-     * by node id. The chips are drawn, not laid out, so the layout would otherwise put the next
-     * column exactly where "533.33mB/s Air" goes.
-     */
     /** World-space rectangles the chips occupy, for the router to route around. */
     private List<ArrowRouter.Rect> chipRects() {
         final List<ArrowRouter.Rect> rects = new ArrayList<>();
-        for (final BalanceView.Boundary flow : BalanceView.boundary(graph)) {
+        for (final BalanceView.Boundary flow : graph.boundary()) {
             final RecipeNodeWidget widget = nodeWidgets.get(
                 flow.port()
                     .nodeId());
@@ -502,9 +487,14 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
             + Math.round(Minecraft.getMinecraft().fontRenderer.getStringWidth(flow.label()) * CHIP_TEXT_SCALE);
     }
 
+    /**
+     * World-space room to keep clear beside each node for its boundary chips, {@code {left, right}}
+     * by node id. The chips are drawn, not laid out, so the layout would otherwise put the next
+     * column exactly where "533.33mB/s Air" goes.
+     */
     private Map<UUID, int[]> chipMargins() {
         final Map<UUID, int[]> margins = new HashMap<>();
-        for (final BalanceView.Boundary flow : BalanceView.boundary(graph)) {
+        for (final BalanceView.Boundary flow : graph.boundary()) {
             final int width = CHIP_GAP + chipWorldWidth(flow);
             final int side = flow.port()
                 .input() ? 0 : 1;
@@ -517,9 +507,13 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         return margins;
     }
 
+    /**
+     * Stub source and sink markers for everything crossing the chart's boundary. Derived from the
+     * solve and never stored: they are not {@link Node}s and take no part in layout or routing.
+     */
     private void drawExternalChips() {
         if (graph.getZoom() < CHIP_MIN_ZOOM) return;
-        for (final BalanceView.Boundary flow : BalanceView.boundary(graph)) {
+        for (final BalanceView.Boundary flow : graph.boundary()) {
             drawChip(flow);
         }
     }

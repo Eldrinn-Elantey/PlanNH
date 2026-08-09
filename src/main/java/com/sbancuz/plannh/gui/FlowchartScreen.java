@@ -471,7 +471,7 @@ public class FlowchartScreen extends ModularScreen {
         /** Rows plus one heading per decision, but no heading when there is only one question. */
         private int choiceLineCount(final BalanceResult br) {
             if (!choicesOffered(br)) return 0;
-            final BalanceView.Choices choices = BalanceView.choices(graph());
+            final BalanceView.Choices choices = graph().choices();
             final int headings = choices.groups()
                 .size() > 1 ? choices.groups()
                     .size() : 0;
@@ -755,7 +755,7 @@ public class FlowchartScreen extends ModularScreen {
             choicesHeaderY = -1;
             if (!choicesOffered(br)) return ly;
 
-            final BalanceView.Choices alts = BalanceView.choices(graph());
+            final BalanceView.Choices alts = graph().choices();
             choicesHeaderY = ly;
             GuiDraw.drawRect(
                 SECTION_HEADER_X,
@@ -846,7 +846,7 @@ public class FlowchartScreen extends ModularScreen {
             final Graph g0 = graph();
             final BalanceResult br0 = g0.balance();
             if (choicesOffered(br0)) {
-                final List<BalanceView.Choice> options = BalanceView.choices(g0)
+                final List<BalanceView.Choice> options = g0.choices()
                     .rows();
                 for (int i = 0; i < choiceRows.size() && i < options.size(); i++) {
                     if (my < choiceRows.get(i)[0] || my >= choiceRows.get(i)[1]) continue;

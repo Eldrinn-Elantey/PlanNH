@@ -35,6 +35,24 @@ class GroundTruthTest {
     private static final double EPS = 1e-4;
 
     @Test
+    void solverEffortIsClampedToItsAdvertisedRange() {
+        // Out of range has to mean the nearest value in range, not a budget of zero and not a
+        // twenty-second budget multiplied by two billion. Forge clamps what it parses, but the
+        // field is public and this is what the solver actually multiplies by.
+        final int restore = Config.solverEffortPercent;
+        try {
+            Config.solverEffortPercent = Integer.MAX_VALUE;
+            assertEquals(Config.SOLVER_EFFORT_MAX, Config.solverEffort(), "above the ceiling reads as the ceiling");
+            Config.solverEffortPercent = Integer.MIN_VALUE;
+            assertEquals(Config.SOLVER_EFFORT_MIN, Config.solverEffort(), "below the floor reads as the floor");
+            Config.solverEffortPercent = 100;
+            assertEquals(100, Config.solverEffort(), "and the default passes through untouched");
+        } finally {
+            Config.solverEffortPercent = restore;
+        }
+    }
+
+    @Test
     void loopGraph_oneSourceInjectingThirdOfLoopDemand() {
         // DT (pinned number:1) consumes 100/s diluted sulfuric acid; the LCR loop returns only
         // 2/3 of it. Expect exactly ONE open gate: a source on the DT's diluted-acid input
@@ -469,15 +487,12 @@ class GroundTruthTest {
         // leave the structure alone. Absolute tolerances broke this - a chart pinned at a tenth of
         // the rate used to come back with a different gate count, or with most machines idle.
         //
-        // Gate count is asserted as a SPREAD rather than as equality, because it is not fully
-        // scale-invariant today and the reason is understood: the deletion filter always returns a
-        // minimal support (no single gate removable) but only stage 1's MILP proves it minimum, and
-        // that MILP is bounded by wall clock. On a loaded machine it can fail to close, leaving the
-        // filter's answer - one gate wider - standing. palladium_line has been seen to answer 9 or
-        // 10 for this reason. Asserting equality here makes the suite fail when the machine is
-        // busy, which is a true statement about the solver but a useless test; the spread still
-        // catches a genuine loss of scale invariance, which would move the count by much more.
-        // See MILP_CERT_BUDGET_MILLIS in AutoBalancer for the fix that would restore equality.
+        // Gate count is asserted as equality. It used to be asserted as a spread, because stage 1's
+        // certifying MILP was bounded by wall clock: on a loaded machine it could fail to close,
+        // leaving the deletion filter's answer - one gate wider - standing, and palladium_line
+        // answered 9 or 10 depending on what else the box was doing. That budget is now counted in
+        // branch-and-bound nodes (MILP_CERT_NODE_BUDGET), so the same chart certifies the same way
+        // on an idle machine and a busy one, and this can hold the solver to the stronger claim.
         for (final String name : new String[] { "mk1", "palladium_line" }) {
             final Map<Integer, Double> quantityByGateCount = new HashMap<>();
             int minGates = Integer.MAX_VALUE;
@@ -509,15 +524,12 @@ class GroundTruthTest {
                 }
                 assertAllMachinesRun(chart, s);
             }
-            final int spread = maxGates - minGates;
-            final int worst = maxGates;
-            assertTrue(
-                spread <= 1,
-                () -> name + " gate count moved by "
-                    + spread
-                    + " across scales ("
-                    + worst
-                    + " at worst) - more than an uncertified stage 1 can explain");
+            final int low = minGates;
+            final int high = maxGates;
+            assertEquals(
+                low,
+                high,
+                () -> name + " gate count moved between " + low + " and " + high + " across scales");
         }
     }
 

@@ -2,6 +2,7 @@ package com.sbancuz.plannh.data.flowchart;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -44,6 +45,12 @@ public class Graph {
 
     private Balancer.BalanceResult balance = null;
     private Summary summary = null;
+    /**
+     * The two display views, built on first ask after a solve rather than with it: the canvas wants
+     * the boundary every frame and never the choices, the summary panel wants the reverse.
+     */
+    private List<BalanceView.Boundary> boundaryView = null;
+    private BalanceView.Choices choicesView = null;
 
     private boolean dirty = true;
 
@@ -77,6 +84,8 @@ public class Graph {
         if (dirty) {
             balance = Balancer.balance(this, balanceMode, opsMode);
             summary = Summary.compute(balance, this, opsMode);
+            boundaryView = null;
+            choicesView = null;
             dirty = false;
         }
         return balance;
@@ -88,13 +97,29 @@ public class Graph {
      */
     public AutoBalancer.Alternatives alternatives() {
         final AutoBalancer.Alternatives computed = balance().alternatives();
-        return computed == null ? new AutoBalancer.Alternatives(null, java.util.List.of(), true, java.util.List.of())
-            : computed;
+        return computed == null ? new AutoBalancer.Alternatives(null, List.of(), true, List.of()) : computed;
     }
 
     public Summary summary() {
         balance(); // ensure up-to-date
         return summary;
+    }
+
+    /**
+     * Everything crossing the chart's boundary. Held from solve to solve because the canvas asks
+     * once per frame and the answer only moves when the chart does.
+     */
+    public List<BalanceView.Boundary> boundary() {
+        balance(); // drops a view built before the last edit
+        if (boundaryView == null) boundaryView = BalanceView.boundary(this);
+        return boundaryView;
+    }
+
+    /** The equally-workable answers, grouped by the question each one answers. Cached as above. */
+    public BalanceView.Choices choices() {
+        balance();
+        if (choicesView == null) choicesView = BalanceView.choices(this);
+        return choicesView;
     }
 
     public Collection<Node> getNodes() {

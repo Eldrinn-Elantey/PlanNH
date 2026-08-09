@@ -14,6 +14,7 @@ import org.ojalgo.optimisation.Expression;
 import org.ojalgo.optimisation.Optimisation;
 import org.ojalgo.optimisation.Variable;
 
+import com.sbancuz.plannh.Config;
 import com.sbancuz.plannh.data.flowchart.FlowModel.Handles;
 import com.sbancuz.plannh.data.flowchart.FlowModel.MachineData;
 import com.sbancuz.plannh.data.flowchart.FlowModel.StageSolve;
@@ -59,88 +60,73 @@ import com.sbancuz.plannh.data.flowchart.FlowModel.StageSolve;
 public final class AutoBalancer {
 
     /**
-     * How far above a chart's own scale the big-M gate links sit. Relative, because the model is
-     * homogeneous: a fixed 1e6 is generous on a chart moving thousands of litres and absurd on one
-     * moving hundredths of an item per second, and an absurd M is what kills branch-and-bound - the
-     * relaxation reads {@code y >= ext/M} as zero, the root bound says nothing, and stage 1 silently
-     * stops certifying below some scale. mk1 pinned at 1/100th of its rate used to answer with a
-     * different gate than mk1 pinned at its rate, for exactly that reason. Under-estimates are
-     * caught by {@link #pressesCap} and grown.
+     * How far above a chart's own scale the big-M gate links sit. Relative because the model is
+     * homogeneous: one fixed M is absurd on a chart measured in hundredths of an item, and an
+     * absurd M kills branch-and-bound - the relaxation reads {@code y >= ext/M} as zero and stage 1
+     * certifies nothing. Under-estimates are caught by {@link #pressesCap} and grown.
      */
     private static final double BIG_M_FACTOR = 1e3;
     private static final int MAX_M_GROWTHS = 3;
     /**
-     * Ceiling on the WHOLE solve, not one model. A pass is a deletion filter, a certification MILP,
-     * up to {@link #MAX_TIED_SUPPORTS} stage-2 MILPs each retried up to {@link #MAX_M_GROWTHS} times,
-     * and a stage-3 LP per candidate - and {@link #solve} runs a second pass whenever stage-0 floors
-     * bite. At 15s each and no total, that is minutes of frozen GUI, because the solve runs from
-     * draw(). Everything optional (certification, tie enumeration) is skipped once this is spent,
-     * and the answer already in hand is returned with a note.
+     * Ceiling on the WHOLE solve: a pass is a dozen models and {@link #solve} runs two of them
+     * whenever stage-0 floors bite. This is how long the GUI can freeze, since the solve runs from
+     * draw(). Optional stages skip themselves once it is spent. Scaled by {@link #effort}.
      */
     private static final long SOLVE_BUDGET_MILLIS = 20_000;
     /**
      * Floor on any one model's time limit, however little of {@link #SOLVE_BUDGET_MILLIS} is left.
-     * A solver given a millisecond does not decline to answer, it aborts and hands back whatever
-     * point it was holding - which is the one outcome worth avoiding, since a stage's cap and
-     * support are built on that point.
+     * A solver given a millisecond does not decline to answer, it aborts into whatever point it was
+     * holding - and the stage's cap and support are built on that point.
      */
     static final long MIN_MODEL_MILLIS = 250;
     /**
-     * Budget for the exact stage-1 MILP once the LP deletion filter has already produced a
-     * minimal support. Big-M count minimization gives branch-and-bound no usable root bound, so
-     * large charts cannot be certified in any budget - proofs that land do so within 150ms,
-     * anything longer only lengthens the freeze for the same answer.
-     *
-     * <p>
-     * TODO: make this an iteration or node count rather than a wall clock. Measuring in
-     * milliseconds means the answer depends on how busy the machine is: the filter's support is
-     * minimal but not always minimum, so a certification that closes on an idle box and times out
-     * on a loaded one returns two different gate counts for the same chart. palladium_line answers
-     * 9 or 10 gates for exactly this reason, which is why
-     * GroundTruthTest#solutionsScaleWithTheirPins asserts a spread there instead of equality. A
-     * deterministic budget would let it assert equality again and would make a solve reproducible
-     * between two machines, which a wall clock never can.
+     * Budget for the exact stage-1 MILP, counted in branch-and-bound nodes and not milliseconds:
+     * the deletion filter's support is minimal but not always minimum, so whichever incumbent the
+     * search holds when the budget runs out becomes the answer, and a wall clock hands that choice
+     * to whatever else the machine is doing. Measured - every certification that closes across the
+     * corpus closes within 109 nodes. Deliberately not scaled by {@link #effort}: an uncertified
+     * stage 1 fixes stage 2 to the filter's support instead of letting it search under a proven
+     * cap, which costs far more answer than the time it saves.
      */
-    private static final long MILP_CERT_BUDGET_MILLIS = 500;
+    private static final int MILP_CERT_NODE_BUDGET = 512;
     /**
-     * Relative tolerance for "two solves found the SAME optimum". The model is homogeneous -
-     * scaling every pin scales every objective - so an absolute epsilon would call two genuinely
-     * different optima tied on a chart measured in millibuckets, and two identical ones distinct on
-     * a chart measured in dust. Decades above the LP's own objective agreement (feasibility is
-     * NumberContext.of(12, 10)) and decades below any difference a player would notice.
+     * Relative tolerance for "two solves found the SAME optimum". Relative because the model is
+     * homogeneous: an absolute epsilon calls two different optima tied on a chart measured in
+     * millibuckets and two identical ones distinct on a chart measured in dust. Decades above the
+     * LP's own objective agreement and decades below anything a player would notice.
      */
     static final double TIE_REL = 1e-6;
     /** Relative slack on the stage-2 quantity cap in stage 3. */
     private static final double QTY_EPS = 1e-7;
+    /** How many equally-good supports stage 3 gets to choose between. Scaled by {@link #effort}. */
     private static final int MAX_TIED_SUPPORTS = 5;
     /**
      * Wall budget for the WHOLE alternatives search, not one solve inside it. The user asked "what
      * else could this be", not "recompute everything"; over budget the list is returned marked
-     * incomplete rather than grown.
+     * incomplete rather than grown. Scaled by {@link #effort}.
      */
     private static final long ALT_BUDGET_MILLIS = 750;
     /**
      * The share of {@link #ALT_BUDGET_MILLIS} the breadth search may spend before the rest is
-     * reserved for turning what it found into answers. Without the split, a chart with a thousand
-     * candidate swaps spends the entire budget deciding which are feasible and then has nothing
-     * left to evaluate any of them with - it comes back having looked everywhere and found
-     * nothing, which is the worst of both.
+     * reserved for turning what it found into answers. Without the split a chart with a thousand
+     * candidate swaps spends the whole budget deciding which are feasible and evaluates none.
      */
     private static final long ALT_SEARCH_SHARE_PERCENT = 50;
     /**
-     * Cap on gate swaps tried. The neighbourhood is |support| x |gates|, and each try costs one
-     * stage-2 LP - the expensive part, stage 3 and canonicalization, is paid only by the shortlist
-     * that survives. That is what makes a cap this size affordable; whatever is still left untried
-     * is reported, because a silently truncated list reads as "there is nothing else".
+     * Cap on gate swaps tried. The neighbourhood is |support| x |gates| and each try costs one
+     * stage-2 LP; stage 3 and canonicalization are paid only by the shortlist that survives, which
+     * is what makes a cap this size affordable. Whatever is left untried is reported rather than
+     * dropped, because a silently truncated list reads as "there is nothing else". Scaled by
+     * {@link #effort}.
      */
     private static final int MAX_ALT_SWAPS = 1024;
     /** How many answers the list is allowed to carry before it stops being a list and starts being noise. */
     private static final int MAX_ALT_OPTIONS = 8;
     /**
-     * Display order, derived from {@link Preference#ORDER} rather than written out beside it: the
-     * default, then anything that beats it, then what ties it, then what it gave up - mildest
-     * concession first, which means the LATEST preference to be given up sorts best. A hand-kept
-     * list drifts from the preference sequence and silently sorts an unlisted rank to the front.
+     * Display order, derived from {@link Preference#ORDER} rather than written beside it: the
+     * default, then what beats it, then what ties it, then what it gave up - mildest concession
+     * first, so the LATEST preference given up sorts best. A hand-kept list drifts from the
+     * preference sequence and silently sorts an unlisted rank to the front.
      */
     private static final List<Rank> RANK_ORDER = displayOrder();
     private static final Preference LEAST_EXCESS = Preference.refinements()
@@ -165,6 +151,16 @@ public final class AutoBalancer {
         return List.copyOf(order);
     }
 
+    /**
+     * How much of a tuned effort number {@link Config#solverEffortPercent} buys. Applied where each
+     * number is used rather than folded into the constants, so nothing depends on whether this class
+     * initialized before the config loaded. Only the numbers that trade time for a better answer are
+     * scaled; the constants say which.
+     */
+    static long effort(final long tuned) {
+        return Math.max(1, tuned * Config.solverEffort() / 100);
+    }
+
     private AutoBalancer() {}
 
     /**
@@ -181,9 +177,8 @@ public final class AutoBalancer {
     public record PortRef(UUID nodeId, int portIndex, boolean input) {
 
         /**
-         * Canonical order, matching the node order {@link FlowModel} builds machines in. Gives everything
-         * derived from a port a stable spelling, which is what lets a tie be broken by the chart
-         * itself rather than by whatever order branch-and-bound happened to enumerate.
+         * Canonical order, matching the node order {@link FlowModel} builds machines in, so a tie is
+         * broken by the chart itself rather than by the order branch-and-bound enumerated in.
          */
         public static final Comparator<PortRef> ORDER = Comparator.comparing(PortRef::nodeId)
             .thenComparing(PortRef::input)
@@ -191,15 +186,10 @@ public final class AutoBalancer {
     }
 
     /**
-     * The identity of one answer: the anchor port of every open gate, sorted.
-     *
-     * <p>
-     * Gate indices are rebuilt from scratch on every solve - UUID-sorted nodes, then edges, then
-     * connected components - so nothing derived from them survives a save and reload. A port,
-     * however, names itself the same way in every rebuild. The anchor is the smallest
-     * {@link PortRef} among ALL of a gate's ports, never only the ones carrying flow, so the key
-     * does not move when the solver redistributes a dump between two ports of one gate. Gates
-     * partition the connected ports, so distinct supports always give distinct keys.
+     * The identity of one answer: the anchor port of every open gate, sorted. Ports and not gate
+     * indices, because gate indices are rebuilt on every solve and do not survive a save. The anchor
+     * is the smallest {@link PortRef} among ALL of a gate's ports, not only the ones carrying flow,
+     * so the key does not move when the solver redistributes a dump between two ports of one gate.
      */
     public record ChoiceKey(List<PortRef> gateAnchors) implements Comparable<ChoiceKey> {
 
@@ -244,22 +234,17 @@ public final class AutoBalancer {
         MOVES_MORE,
         /**
          * Same gates and same excess, and it moves LESS material than the default. Reachable
-         * because the default's tie enumeration is capped at {@link #MAX_TIED_SUPPORTS} supports
-         * and a one-gate swap can step outside what it reached. Listed rather than swallowed: the
-         * honest thing is to show that the default was not the last word.
+         * because the default's tie enumeration is capped at {@link #MAX_TIED_SUPPORTS} supports and
+         * a one-gate swap can step outside what it reached.
          */
         MOVES_LESS
     }
 
     /**
-     * One answer the user may pick.
-     *
-     * <p>
-     * A chart with several open gates poses several independent questions, and an option answers
-     * exactly one of them: {@code replaces} names the decision it belongs to (the gate of the
-     * current answer it would displace) and {@code opens} the gate it would use instead. Grouping
-     * by {@code replaces} is what keeps a seven-row list from reading as one undifferentiated soup
-     * when it is really two questions with three and four answers.
+     * One answer the user may pick. A chart with several open gates poses several independent
+     * questions and an option answers exactly one: {@code replaces} names the decision it belongs
+     * to, {@code opens} the gate it would use instead. Grouping by {@code replaces} is what keeps
+     * two questions with three and four answers from reading as one seven-row soup.
      *
      * @param key       the WHOLE support this option implies - what gets stored when it is picked.
      * @param externals the flows at {@code opens} only, i.e. what actually differs. Labelling from
@@ -274,12 +259,9 @@ public final class AutoBalancer {
     }
 
     /**
-     * Every answer worth showing for one chart, default first.
-     *
-     * <p>
-     * {@code complete} is false when the search stopped on its budget or its swap cap rather than on
-     * exhaustion: the UI has to say "at least these", because claiming a complete list it never
-     * proved is the one thing a solver may not do.
+     * Every answer worth showing for one chart, default first. {@code complete} is false when the
+     * search stopped on its budget or its swap cap rather than on exhaustion, so the UI can say
+     * "at least these" instead of claiming a list it never proved.
      */
     public record Alternatives(ChoiceKey chosen, List<Alternative> options, boolean complete, List<String> notes) {}
 
@@ -354,14 +336,8 @@ public final class AutoBalancer {
     public record Answer(Result result, Alternatives alternatives) {}
 
     /**
-     * Solve and enumerate in ONE pass.
-     *
-     * <p>
-     * The two used to be separate entry points, which meant the panel paid for the whole
-     * lexicographic pipeline twice over - once to draw the chart and again to ask what else it
-     * could have been. On the largest corpus chart that was a second of duplicated work for an
-     * answer already sitting in memory, and it is the reason the choices list used to hide behind
-     * a click.
+     * Solve and enumerate in ONE pass, so the panel does not pay for the whole lexicographic
+     * pipeline twice - once to draw the chart and again to ask what else it could have been.
      */
     public static Answer solveWithAlternatives(final Graph graph, final Map<UUID, Double> extraExtentPins,
         final ChoiceKey choice) {
@@ -372,7 +348,7 @@ public final class AutoBalancer {
         final boolean withAlternatives) {
         final long start = System.currentTimeMillis();
         final Alternatives none = new Alternatives(null, List.of(), true, List.of());
-        final FlowModel ctx = new FlowModel(graph, extraExtentPins, Budget.of(SOLVE_BUDGET_MILLIS));
+        final FlowModel ctx = new FlowModel(graph, extraExtentPins, Budget.of(effort(SOLVE_BUDGET_MILLIS)));
         if (ctx.machines.isEmpty()) {
             return new Answer(Result.fail("empty graph"), none);
         }
@@ -438,19 +414,11 @@ public final class AutoBalancer {
     // ---------------------------------------------------------------------------------------
 
     /**
-     * Every answer worth showing for this chart, the solver's own first.
-     *
-     * <p>
-     * Deliberately not part of {@link #solve}: that runs from the GUI's draw path behind a dirty
-     * flag, and this costs an LP per candidate swap, which is only worth paying when somebody is
-     * actually looking at the choices.
-     *
-     * <p>
-     * The bar for being listed is NOT DOMINATED, not TIED. Past the gate count, every rule that
-     * narrows the field is a preference: the sink-over-source tilt is a constant somebody picked,
-     * and "least material moved" is a taste. So anything with the same gate count that is no worse
-     * on excess gets shown, carrying the reason it is not the default - a heuristic the user cannot
-     * see is a heuristic the user cannot disagree with.
+     * Every answer worth showing for this chart, the solver's own first. Separate from
+     * {@link #solve} because it costs an LP per candidate swap, worth paying only when somebody is
+     * looking. The bar for being listed is NOT DOMINATED rather than TIED: past the gate count every
+     * rule that narrows the field is a preference, so anything with the same gate count and no worse
+     * excess is shown, carrying the reason it is not the default.
      */
     public static Alternatives alternatives(final Graph graph, final Map<UUID, Double> extraExtentPins) {
         return solveWithAlternatives(graph, extraExtentPins, graph.getExcessChoice()).alternatives();
@@ -488,8 +456,9 @@ public final class AutoBalancer {
         // One gate swapped at a time. Equal gate count by construction, so stage 1's optimum holds
         // and no MILP is needed; either direction, because the whole point is to surface the
         // source/sink tilt rather than let it delete a candidate before anyone sees it.
-        final Budget whole = Budget.of(ALT_BUDGET_MILLIS);
-        ctx.budget = Budget.of(ALT_BUDGET_MILLIS * ALT_SEARCH_SHARE_PERCENT / 100);
+        final long altBudget = effort(ALT_BUDGET_MILLIS);
+        final Budget whole = Budget.of(altBudget);
+        ctx.budget = Budget.of(altBudget * ALT_SEARCH_SHARE_PERCENT / 100);
         final Set<ChoiceKey> seen = new HashSet<>();
         seen.add(chosen);
         // Two passes, because the neighbourhood is large and most of it is not feasible. A stage-2
@@ -503,7 +472,7 @@ public final class AutoBalancer {
         for (final int out : sorted(incumbent)) {
             for (int in = 0; in < ctx.gates.size(); in++) {
                 if (incumbent.contains(in)) continue;
-                if (evaluated >= MAX_ALT_SWAPS || ctx.budget.expired()) {
+                if (evaluated >= effort(MAX_ALT_SWAPS) || ctx.budget.expired()) {
                     skipped++;
                     continue;
                 }
@@ -527,10 +496,9 @@ public final class AutoBalancer {
             Comparator.<Swap, Double>comparing(c -> c.solve().externalQuantity)
                 .thenComparing(c -> ctx.keyOf(c.solve().support)));
 
-        // Round-robin over the decisions rather than straight down the sorted list. A chart asking
-        // two questions where one happens to have six cheap answers would otherwise spend the whole
-        // option budget on that one and leave the other showing a heading with nothing under it -
-        // which reads as "no alternatives here" when the truth is "nobody looked".
+        // Round-robin over the decisions rather than straight down the sorted list: a chart asking
+        // two questions where one has six cheap answers would otherwise spend the whole option
+        // budget on that one and leave the other showing a heading with nothing under it.
         final List<Swap> fair = interleaveByDecision(shortlist);
         for (final Swap candidate : fair) {
             if (options.size() >= MAX_ALT_OPTIONS || ctx.budget.expired()) {
@@ -672,16 +640,11 @@ public final class AutoBalancer {
     // ---------------------------------------------------------------------------------------
 
     /**
-     * Which pins the chart cannot satisfy at once, or null when the pins are not the problem.
-     *
-     * <p>
-     * A floor-free stage 1 fails only when the most permissive model there is - every gate open,
-     * every external free, every unconnected port a free terminal - is still infeasible. With
-     * nonnegative externals on every connected port, the only thing left that can conflict is the
-     * pins: two fixed counts on machines that feed each other at a ratio their counts do not
-     * honour. So drop them weakest first (fixed counts before targets, mirroring the ranking in
-     * {@link FlowModel#applyPins}) until the LP closes, and name the ones that had to go. Reporting "no
-     * feasible support" for that is technically true and practically useless.
+     * Which pins the chart cannot satisfy at once, or null when the pins are not the problem. A
+     * floor-free stage 1 fails only when the most permissive model there is comes back infeasible,
+     * and with nonnegative externals on every connected port the only thing left to conflict is the
+     * pins - so drop them weakest first, the {@link FlowModel#applyPins} ranking, until the LP closes
+     * and name the ones that had to go.
      */
     private static String diagnosePins(final FlowModel ctx) {
         final List<MachineData> pinned = new ArrayList<>();
@@ -826,7 +789,7 @@ public final class AutoBalancer {
         cuts.add(s2.support);
         final Set<Set<Integer>> seen = new HashSet<>();
         seen.add(s2.support);
-        while (candidates.size() < MAX_TIED_SUPPORTS && !ctx.budget.expired()) {
+        while (candidates.size() < effort(MAX_TIED_SUPPORTS) && !ctx.budget.expired()) {
             final StageSolve next = solveStage2Cut(ctx, floors, weightedCap, cuts, scale);
             if (next == null || next.externalQuantity > s2.externalQuantity + ctx.tieTolerance(s2.externalQuantity, s2)
                 || ctx.weightedCost(next.support) > weightedCap + 0.5) {
@@ -880,16 +843,11 @@ public final class AutoBalancer {
 
     /**
      * LP over the gate structure with no binaries: externals outside {@code support} are closed
-     * (null = all open), objective = weighted external quantity (source flow costs fractionally
-     * more than sink flow, mirroring the stage-1 preference).
-     *
-     * <p>
-     * Raw quantity here, deliberately, where stage 2 measures externals in crafts: what this LP
-     * produces is a starting SUPPORT for the deletion filter, not a quantity anyone reads, and the
-     * filter can only shrink that support one gate at a time. Raw quantity makes a wide, thin
-     * support expensive and so is the better proxy for "few gates"; normalized, palladium_line
-     * opens 16 gates where 9 suffice, because spreading excess across many high-throughput fluid
-     * ports costs almost nothing per craft.
+     * (null = all open), objective = weighted external quantity, source flow costing fractionally
+     * more than sink flow. Raw quantity here where stage 2 measures externals in crafts, because
+     * what this produces is a starting SUPPORT rather than a number anyone reads: raw quantity makes
+     * a wide, thin support expensive and so proxies "few gates". Normalized, palladium_line opens 16
+     * gates where 9 suffice.
      */
     private static StageSolve solveExternalsLp(final FlowModel ctx, final double[] floors, final Set<Integer> support) {
         final Handles h = ctx.buildModel(0, false, floors);
@@ -918,10 +876,13 @@ public final class AutoBalancer {
         double bigM = BIG_M_FACTOR * scale;
         for (int growth = 0; growth <= MAX_M_GROWTHS; growth++) {
             final Handles h = ctx.buildModel(bigM, true, floors);
-            final long certLimit = Math
-                .max(MIN_MODEL_MILLIS, Math.min(MILP_CERT_BUDGET_MILLIS, ctx.budget.remaining()));
-            h.model().options.time_abort = certLimit;
-            h.model().options.time_suffice = certLimit;
+            // The node budget is what decides this model; the wall clock buildModel already set
+            // stays behind it as a valve against nodes that are individually slow, so a chart the
+            // corpus has never seen cannot freeze the GUI for the whole solve budget. Tripping the
+            // valve costs the proof, not the answer - the state comes back FEASIBLE, and an
+            // uncertified stage 1 is a case the rest of the pipeline already handles.
+            h.model().options.iterations_abort = MILP_CERT_NODE_BUDGET;
+            h.model().options.iterations_suffice = MILP_CERT_NODE_BUDGET;
             final Expression ub = upperBoundCost == null ? null
                 : h.model()
                     .addExpression("ub_cut");
@@ -947,20 +908,21 @@ public final class AutoBalancer {
             final long solveStart = System.currentTimeMillis();
             final Optimisation.Result result = h.model()
                 .minimise();
-            final boolean withinBudget = System.currentTimeMillis() - solveStart < certLimit;
+            final boolean withinValve = System.currentTimeMillis() - solveStart < h.model().options.time_abort;
             if (!isUsable(result)) return null;
             if (pressesCap(h, bigM)) {
                 bigM *= 10;
                 continue;
             }
-            // OPTIMAL or DISTINCT (unique optimum) both certify; FEASIBLE = timeout incumbent. The
-            // wall check is belt and braces: a state that says OPTIMAL because the search stopped on
-            // time_suffice rather than on a closed gap would make every downstream stage - the cap,
-            // the tie enumeration - run on a proof that was never obtained.
+            // OPTIMAL or DISTINCT (unique optimum) both certify; FEASIBLE = the budget stopped the
+            // search. The wall check is belt and braces on the valve: a state that says OPTIMAL
+            // because the search stopped on time_suffice rather than on a closed gap would make
+            // every downstream stage - the cap, the tie enumeration - run on a proof that was never
+            // obtained.
             return StageSolve.from(
                 ctx,
                 h,
-                withinBudget && result.getState()
+                withinValve && result.getState()
                     .isOptimal());
         }
         return null;
@@ -1025,21 +987,14 @@ public final class AutoBalancer {
     }
 
     /**
-     * Stage 3b: the one canonical point among stage 3's optima.
-     *
-     * <p>
-     * Stage 3 fixes how much flows and how much is voided, but not always WHERE: two ports of one
-     * gate can split a dump differently, and two parallel edges can carry a demand in any
-     * proportion, on a solution the solver considers finished. Capping both totals at what stage 3
-     * already achieved and then minimizing a rank-weighted sum can only redistribute inside that
-     * optimum - no objective moves - but it pushes mass onto the lowest-ranked port and edge, and
-     * so gives the same chart the same numbers on every solve. Without it the displayed rates, and
-     * any choice keyed off them, drift between runs and across a save and reload.
-     *
-     * <p>
-     * Ranks are dimensionless multipliers in {@code [1, 2]} taken from the canonical build order
-     * (UUID-sorted nodes, then UUID-sorted edges), so this stays scale-free and coefficients stay
-     * near 1.
+     * Stage 3b: the one canonical point among stage 3's optima. Stage 3 fixes how much flows and
+     * how much is voided but not always WHERE - two ports of one gate can split a dump differently,
+     * and two parallel edges can carry a demand in any proportion, on a solution the solver
+     * considers finished. Capping both totals at what stage 3 reached and minimizing a rank-weighted
+     * sum can only redistribute inside that optimum, but it pushes mass onto the lowest-ranked port
+     * and edge, so the same chart gets the same rates on every solve and across a reload. Ranks are
+     * dimensionless multipliers in {@code [1, 2]} from the canonical build order, keeping this
+     * scale-free.
      */
     private static StageSolve canonicalize(final FlowModel ctx, final double[] floors, final Set<Integer> open,
         final StageSolve s3) {

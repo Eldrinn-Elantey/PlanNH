@@ -14,19 +14,14 @@ import com.sbancuz.plannh.data.flowchart.AutoBalancer.Solution;
 import com.sbancuz.plannh.gui.GuiHelper;
 
 /**
- * What the balancer's answer looks like to a reader, as data rather than as pixels.
+ * What the balancer's answer looks like to a reader, as data rather than as pixels. Everything the
+ * canvas and the summary panel say about the chart's boundary is decided here and merely drawn
+ * there, which leaves the widgets nothing to do but position and colour pre-built rows.
  *
  * <p>
- * Everything the canvas and the summary panel say about the chart's boundary - what is imported,
- * what is thrown away, which of the equally workable answers is on screen and what the others give
- * up - is decided here and merely drawn there. That split is the point: this is the layer a test
- * can drive, and a widget that only positions and colours pre-built rows has very little room left
- * to be wrong in.
- *
- * <p>
- * Minecraft-free, so it runs under a plain JUnit. It leans on {@link GuiHelper#formatRate} rather
- * than growing its own number formatting, because two authorities for "how a rate is spelled" is
- * how a summary and a node label start disagreeing about the same flow.
+ * Minecraft-free, so it runs under a plain JUnit. Rates go through {@link GuiHelper#formatRate}
+ * rather than a formatter of its own: two authorities for how a rate is spelled is how a summary
+ * and a node label start disagreeing about the same flow.
  */
 public final class BalanceView {
 
@@ -78,22 +73,29 @@ public final class BalanceView {
     /**
      * @param complete false when the search stopped on its budget or its cap. The caller has to say
      *                 so rather than present a truncated list as the whole truth.
+     * @param rows     every row across every group, for callers that only need a flat list to click
+     *                 through. Flattened once at construction: the panel reads it twice per frame,
+     *                 to measure itself and again to draw.
      */
-    public record Choices(List<Group> groups, boolean complete, List<String> notes) {
+    public record Choices(List<Group> groups, boolean complete, List<String> notes, List<Choice> rows) {
 
-        /** Every row across every group, for callers that only need a flat list to click through. */
-        public List<Choice> rows() {
+        Choices(final List<Group> groups, final boolean complete, final List<String> notes) {
+            this(groups, complete, notes, flatten(groups));
+        }
+
+        private static List<Choice> flatten(final List<Group> groups) {
             final List<Choice> all = new ArrayList<>();
             for (final Group group : groups) {
                 all.addAll(group.rows());
             }
-            return all;
+            return List.copyOf(all);
         }
     }
 
     /**
-     * Everything crossing the chart's boundary. Cheap: it reads the balance already on hand and
-     * runs no solver of its own.
+     * Everything crossing the chart's boundary. Reads the balance already on hand and runs no
+     * solver of its own, but still builds a list and a label per flow, so callers drawing every
+     * frame want {@link Graph#boundary()} rather than this.
      */
     public static List<Boundary> boundary(final Graph graph) {
         final Solution auto = graph.balance()
@@ -109,8 +111,8 @@ public final class BalanceView {
 
     /**
      * The answers this chart could equally well have had, default first, each marked with what it
-     * gives up. Costs the enumeration behind {@link Graph#alternatives()}, so this is a response to
-     * a user asking rather than something to call while drawing.
+     * gives up. Rebuilds every row and group from the enumeration behind {@link Graph#alternatives()},
+     * so callers drawing every frame want {@link Graph#choices()} rather than this.
      */
     public static Choices choices(final Graph graph) {
         final Alternatives alternatives = graph.alternatives();
@@ -226,13 +228,9 @@ public final class BalanceView {
     }
 
     /**
-     * The one sentence explaining why an answer is not the default.
-     *
-     * <p>
-     * {@link Rank#VOIDS_MORE} says the answer leans on the outside world more than the default
-     * does, which reads as two different sentences depending on which way it leans: an answer that
-     * throws more away and one that imports more are both "more external quantity" to the solver,
-     * and calling an import "voids more" is simply wrong in front of a user.
+     * The one sentence explaining why an answer is not the default. {@link Rank#VOIDS_MORE} needs
+     * two sentences of its own: throwing more away and importing more are both "more external
+     * quantity" to the solver, but calling an import "voids more" is wrong in front of a user.
      */
     public static String reasonOf(final Alternative option) {
         if (option.rank() != Rank.VOIDS_MORE) return reasonOf(option.rank());

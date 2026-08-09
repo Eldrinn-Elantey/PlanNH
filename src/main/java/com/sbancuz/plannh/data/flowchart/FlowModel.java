@@ -57,6 +57,7 @@ final class FlowModel {
     private static final double USE_EPS = 1e-4;
     /** A machine "runs" if its crafts/s exceeds this. */
     private static final double USE_EPS_DETECT = 1e-7;
+    /** Ceiling on any ONE model's time, scaled by {@link AutoBalancer#effort}. */
     private static final long STAGE_TIME_LIMIT_MILLIS = 15_000;
 
     final List<MachineData> machines = new ArrayList<>();
@@ -209,10 +210,9 @@ final class FlowModel {
     }
 
     /**
-     * Says so when a node carries targets it cannot all hit. Parallel outputs share one extent,
-     * so the largest target sets it and every other one is overproduced - correct, but silent,
-     * and a user who typed a number and got a bigger one deserves to be told which number the
-     * chart is actually holding to.
+     * Says so when a node carries targets it cannot all hit. Parallel outputs share one extent, so
+     * the largest target sets it and the rest are overproduced - correct, but silent unless the
+     * chart names the target it is actually holding to.
      */
     private void noteOvershotTargets(final MachineData m, final double chosenExtent) {
         for (final Map.Entry<Integer, Double> t : m.node.targetOutputRates.entrySet()) {
@@ -266,10 +266,19 @@ final class FlowModel {
         // model handed a millisecond aborts into whatever point it happens to be holding, which
         // is worse than not solving it at all. The optional stages check the budget and skip
         // themselves; the ones that are left get a workable slice even if that overshoots.
-        final long limit = Math.max(MIN_MODEL_MILLIS, Math.min(STAGE_TIME_LIMIT_MILLIS, budget.remaining()));
+        final long limit = Math
+            .max(MIN_MODEL_MILLIS, Math.min(AutoBalancer.effort(STAGE_TIME_LIMIT_MILLIS), budget.remaining()));
         model.options.time_abort = limit;
         model.options.time_suffice = limit;
-        model.options.integer(IntegerStrategy.DEFAULT.withGapTolerance(NumberContext.of(12, 8)));
+        // One branch-and-bound worker, not one per core. The parallel search shares a node counter
+        // between threads, so which nodes get processed before a node budget runs out depends on
+        // how the threads happened to interleave - the same chart then answers differently on two
+        // machines, or twice on one. A single worker makes the node order a property of the model.
+        // It costs nothing measurable here: the corpus solves in 2.79s against 2.70s on 16 cores,
+        // because these MILPs close in tens of nodes and the time goes on building them.
+        model.options.integer(
+            IntegerStrategy.DEFAULT.withGapTolerance(NumberContext.of(12, 8))
+                .withParallelism(() -> 1));
         // The conservation rows are what the whole answer rests on, so the solver is held to a
         // tighter feasibility context than its default: the independent validation downstream
         // rejects residuals this would otherwise leave behind.
@@ -391,22 +400,13 @@ final class FlowModel {
     }
 
     /**
-     * Objective weight for one connected port's external: its rate measured in crafts of the
-     * machine that carries it, rather than in that ingredient's own units.
-     *
-     * <p>
-     * Summing raw external rates adds items/s to millibuckets/s in one number, so "least
-     * excess" comes out meaning "least excess that happens to be counted in small units": a
-     * chart with the choice voids 2.97/s of an item byproduct rather than 148/s of a fluid one,
-     * purely because litres outnumber items, and it will burn several times the raw input to do
-     * it. Divided through by the per-craft quantity, both readings are the same number - the
-     * unused extent of the machine the slack sits on - which is what they always were.
-     *
-     * <p>
-     * Deliberately NOT the {@code 1/max(1, qty)} the conservation rows use: that clamp is there
-     * to condition the constraint matrix and belongs there, but in an objective it silently
-     * stops normalizing every sub-unity port, leaving a 0.05-per-craft chanced dust weighted
-     * twenty times too heavily.
+     * Objective weight for one connected port's external: its rate in crafts of the machine that
+     * carries it, not in the ingredient's own units. Summing raw rates adds items/s to
+     * millibuckets/s, so "least excess" would mean "least excess that happens to be counted in
+     * small units" and a chart would burn raw input to void an item byproduct instead of a fluid
+     * one. NOT the {@code 1/max(1, qty)} the conservation rows use: that clamp conditions the
+     * constraint matrix, but in an objective it stops normalizing every sub-unity port and weights
+     * a 0.05-per-craft chanced dust twenty times too heavily.
      */
     double externalWeight(final int port) {
         final double qty = connectedPorts.get(port)
@@ -516,11 +516,7 @@ final class FlowModel {
 
     /** Weighted cost of a gate support under the combinatorial preferences. */
     double weightedCost(final Set<Integer> support) {
-        double cost = 0;
-        for (final int gate : support) {
-            cost += gateWeights[gate];
-        }
-        return cost;
+        return Preference.costOf(support, this::gateWeight);
     }
 
     /**
@@ -573,14 +569,11 @@ final class FlowModel {
     }
 
     /**
-     * Every gate the given solution puts any flow through, however little - the set that must
-     * stay open for that solution to remain feasible. {@link #gateSupport} is the reporting
-     * view of the same data and deliberately ignores negligible flows.
-     *
-     * <p>
-     * The floor is {@link #DUST}, not {@link #ZERO}: a closed port carries solver noise, and
-     * counting that as a gate inflates the stage-2 cap by a whole gate's weight, handing stage 2
-     * permission to open one more gate than stage 1 proved it needed.
+     * Every gate the given solution puts any flow through, however little - the set that must stay
+     * open for it to remain feasible, where {@link #gateSupport} is the reporting view that ignores
+     * negligible flows. The floor is {@link #DUST} and not {@link #ZERO} because a closed port
+     * carries solver noise, and counting that as a gate inflates the stage-2 cap by a whole gate's
+     * weight.
      */
     Set<Integer> carryingGates(final double[] externals, final Set<Integer> fallback) {
         if (externals == null) return fallback;
@@ -920,14 +913,10 @@ final class FlowModel {
         }
 
         /**
-         * The point this model actually holds, or null when it does not conserve.
-         *
-         * <p>
-         * Every stage is checked, not just the answer: a solve that ran out of time can report a
-         * feasible state over a point that breaks its own rows, and the caps, supports and tie
-         * comparisons that later stages build on it are then all derived from a fiction. Every
-         * caller already handles null as "this stage found nothing", so a lying solver degrades into
-         * the fallback path instead of into a wrong chart.
+         * The point this model actually holds, or null when it does not conserve. Every stage is
+         * checked and not just the answer: a solve that ran out of time can report a feasible state
+         * over a point that breaks its own rows, and every later cap and support is built on it.
+         * Callers already treat null as "this stage found nothing".
          */
         static StageSolve from(final FlowModel ctx, final Handles h, final boolean provenOptimal) {
             final double[] extents = values(h.extentVars());
