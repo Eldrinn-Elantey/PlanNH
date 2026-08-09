@@ -557,11 +557,9 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         final int index = flow.port()
             .portIndex();
 
-        // Kind decides the ink, the ingredient decides the frame, and the fill is the same dark
-        // panel for all of them. The fill used to be tinted per kind and half transparent, which
-        // over a dark canvas left green-on-charcoal text nobody could read; the codebase already
-        // solves this for small labels with an almost-opaque near-black plate (PORT_LABEL_BG), and
-        // this is that.
+        // Kind decides the ink, the ingredient decides the frame, and the fill is the same
+        // almost-opaque near-black plate for all of them (PORT_LABEL_BG): a per-kind translucent
+        // tint over a dark canvas leaves green-on-charcoal text unreadable.
         final int textColor;
         switch (flow.kind()) {
             case EXCESS -> textColor = PlannhColors.ACCENT_GREEN2.getColor();

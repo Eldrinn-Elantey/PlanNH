@@ -526,9 +526,6 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         // Both directions read the balance's effective totals so exact rates sit next to exact
         // rates on the same node.
         final float total = effectiveTotal(nb, index, output, port.getAmount());
-        // The port's own formatter, not a bare number: the summary and the boundary chips spell a
-        // fluid in mB and B, and a node body that spells the same flow in bare litres reads as a
-        // different quantity.
         String label = port.getType()
             .formatAmount(total / sec) + "/s "
             + port.getDisplayName();

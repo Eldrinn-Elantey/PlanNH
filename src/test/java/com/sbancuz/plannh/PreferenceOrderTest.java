@@ -23,16 +23,16 @@ import com.sbancuz.plannh.harness.GtnhFlowLoader;
 /**
  * The preference list is meant to be the one place the solver's priorities are written down. These
  * are the claims that makes, stated so they fail rather than rot: an order that drifts out of step
- * with the ranking, or a rank the display order has never heard of, used to be invisible until it
- * changed an answer.
+ * with the ranking, or a rank the display order has never heard of, is invisible until it changes
+ * an answer.
  */
 class PreferenceOrderTest {
 
     @Test
     void theGraphHandsBackNodesAndEdgesInIdOrder() {
-        // FlowModel used to copy and re-sort both of these on every solve. It now consumes them
-        // straight, which is only correct while Graph keeps them sorted - and nothing else in the
-        // solver would notice a HashMap creeping back in until an answer moved.
+        // FlowModel consumes both of these straight rather than sorting them, which is only correct
+        // while Graph keeps them sorted - and nothing in the solver would notice a HashMap creeping
+        // back in until an answer moved.
         for (final String chart : List.of("mk1", "230_platline", "two_decisions")) {
             final Graph graph = GtnhFlowLoader.load(chart)
                 .graph();

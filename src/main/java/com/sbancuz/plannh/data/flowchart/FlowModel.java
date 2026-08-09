@@ -266,12 +266,11 @@ final class FlowModel {
             .max(MIN_MODEL_MILLIS, Math.min(AutoBalancer.effort(STAGE_TIME_LIMIT_MILLIS), budget.remaining()));
         model.options.time_abort = limit;
         model.options.time_suffice = limit;
-        // One branch-and-bound worker, not one per core. The parallel search shares a node counter
-        // between threads, so which nodes get processed before a node budget runs out depends on
-        // how the threads happened to interleave - the same chart then answers differently on two
-        // machines, or twice on one. A single worker makes the node order a property of the model.
-        // It costs nothing measurable here: the corpus solves in 2.79s against 2.70s on 16 cores,
-        // because these MILPs close in tens of nodes and the time goes on building them.
+        // One branch-and-bound worker, not one per core: the parallel search shares a node counter
+        // between threads, so which nodes are processed before a node budget runs out depends on how
+        // the threads interleaved, and the same chart answers differently on two machines. A single
+        // worker makes the node order a property of the model, and costs nothing measurable - these
+        // MILPs close in tens of nodes, where the time goes on building them.
         model.options.integer(
             IntegerStrategy.DEFAULT.withGapTolerance(NumberContext.of(12, 8))
                 .withParallelism(() -> 1));

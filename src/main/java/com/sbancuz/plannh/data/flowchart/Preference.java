@@ -128,9 +128,8 @@ record Preference(String name, Family family, Weight weight, Rank whenWorse, Ran
     }
 
     /**
-     * What a gate support costs under any per-gate weighting. One preference's own weight and the
-     * packed lexicographic weight of {@link #gateWeights} are the same sum over different numbers,
-     * so they share the sum rather than each keeping a copy of it to drift from.
+     * What a gate support costs under any per-gate weighting: one preference's own weight and the
+     * packed lexicographic weight of {@link #gateWeights} are the same sum over different numbers.
      */
     static double costOf(final Set<Integer> support, final IntToDoubleFunction weightOf) {
         double total = 0;

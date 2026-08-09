@@ -39,7 +39,7 @@ import gregtech.nei.GTNEIDefaultHandler.CachedDefaultRecipe;
 
 public class GTProvider implements PropertyProvider {
 
-    /** GT5u stores a chance as 1..10000, where 10000 is 100%. Not 100 - it has been changed to 100 before. */
+    /** GT5u stores a chance as 1..10000, where 10000 is 100%. */
     private static final float GT_CHANCE_SCALE = 10_000f;
 
     public static final RecipeProperty<Integer> SPECIAL_VALUE = RecipeProperty.<Integer>builder("special_value", 0)

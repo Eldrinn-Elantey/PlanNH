@@ -14,9 +14,8 @@ public class Graph {
     // TODO make these use getters
     /**
      * Sorted, so the graph hands its contents back in id order and every consumer that needs a
-     * reproducible answer gets one without sorting first. The solver used to re-sort both of these
-     * on every solve; keeping the rule on the field means it holds for the serializer, the router
-     * and the layout too, which were all reading whatever order the hash buckets happened to give.
+     * reproducible answer gets one without sorting first - the solver, the serializer, the router
+     * and the layout all read these directly.
      */
     public final SortedMap<UUID, Node> nodes = new TreeMap<>();
     public final SortedMap<UUID, Edge> edges = new TreeMap<>();

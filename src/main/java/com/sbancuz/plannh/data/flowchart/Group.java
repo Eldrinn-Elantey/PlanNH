@@ -29,9 +29,9 @@ public class Group extends GraphData {
     private boolean coverChildren;
     /**
      * Sorted for the same reason the graph's own maps are, and for one more: Gson builds a
-     * SortedMap field as a TreeMap but a plain Map keyed on anything but String as an
-     * insertion-ordered LinkedTreeMap, so a group used to iterate one way when built and another
-     * way after a save and reload.
+     * SortedMap field as a TreeMap but a Map keyed on anything but String as an insertion-ordered
+     * LinkedTreeMap, so the declared type here is what makes a reloaded group iterate like a
+     * built one.
      */
     @NotNull
     private final SortedMap<UUID, GraphData> children = new TreeMap<>();

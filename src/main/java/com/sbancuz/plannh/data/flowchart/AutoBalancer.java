@@ -607,9 +607,8 @@ public final class AutoBalancer {
             return run.attempt;
         }
         // Deliberately no note when the pick leans on the outside more than the default would have:
-        // that is what choosing a listed alternative MEANS. The list said as much before it was
-        // picked and the row still says it, so repeating it here reads as "something went wrong"
-        // over an answer the user selected on purpose.
+        // that is what choosing a listed alternative MEANS, and the row offering it already says so.
+        // Repeating it here reads as "something went wrong" over an answer the user chose.
         return Attempt.of(alt, alt.support, run.attempt.certified, run.attempt.notes);
     }
 
@@ -759,11 +758,10 @@ public final class AutoBalancer {
                 continue;
             }
             // Least internal flow wins. A tie there is a tie on every objective the solver has, so
-            // it is broken by two rules that are properties of the chart rather than of the search:
-            // the candidate grown from stage 1's certified support first, since that support is the
-            // same on every solve where the enumeration around it is not, then the lower ChoiceKey.
+            // it breaks on two rules that are properties of the chart rather than of the search:
+            // the candidate grown from stage 1's certified support first, then the lower ChoiceKey.
             // On a chart whose answers are mirror images this order is the ONLY thing separating
-            // them, and it must not depend on the solver's internals or on an ojAlgo upgrade.
+            // them, and it must not depend on solver internals or on an ojAlgo upgrade.
             final double tol = ctx.tieTolerance(best.internalFlow, best);
             final boolean better = s3.internalFlow < best.internalFlow - tol;
             final boolean tied = Math.abs(s3.internalFlow - best.internalFlow) <= tol;
@@ -791,10 +789,9 @@ public final class AutoBalancer {
      * cannot say which of its gates actually carry flow.
      *
      * @param s1Fixed the least-quantity point over stage 1's OWN support, seeded ahead of the
-     *                search. Everything the search finds after {@code s2} depends on which of
-     *                several equal optima the MILP returns first, which is not a property of the
-     *                chart; stage 1's support is, so the one candidate that is always reachable is
-     *                the one this list would otherwise be least likely to hold.
+     *                search. Which of several equal optima the MILP hands back first is not a
+     *                property of the chart, so everything the search finds after {@code s2} varies
+     *                between solves; stage 1's support does not.
      */
     private static List<StageSolve> tiedSupports(final FlowModel ctx, final double[] floors, final double weightedCap,
         final StageSolve s2, final StageSolve s1Fixed, final double scale) {
