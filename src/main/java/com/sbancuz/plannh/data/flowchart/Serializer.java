@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -97,19 +98,12 @@ public final class Serializer {
         root.addProperty("summaryY", set.summaryY);
         root.addProperty("summaryCollapsed", set.summaryCollapsed);
         root.addProperty("summaryMode", set.summaryMode.name());
-        // Every section, not just the folded ones: a section this save has never heard of has to
-        // be distinguishable from one the user deliberately left open, or adding a section would
-        // silently unfold it for everyone who had already saved.
-        final JsonObject sectionFolds = new JsonObject();
-        for (final SummarySection section : SummarySection.values()) {
-            sectionFolds.addProperty(section.name(), set.collapsedSummarySections.contains(section));
-        }
-        root.add("summarySectionFolds", sectionFolds);
         final JsonArray arr = new JsonArray();
         for (final SlotSet.Slot slot : set.slots) {
             final JsonObject slotObj = new JsonObject();
             slotObj.addProperty("name", slot.name);
             slotObj.addProperty("data", encode(slot.graph));
+            slotObj.add("sectionFolds", foldsToJson(slot.collapsedSummarySections));
             arr.add(slotObj);
         }
         root.add("slots", arr);
@@ -138,25 +132,6 @@ public final class Serializer {
                         .getAsString());
             } catch (final IllegalArgumentException ignored) {}
         }
-        // Read section by section over the defaults rather than replacing them: an unmentioned
-        // section is one the save predates, and it keeps the fold a fresh install would give it.
-        if (root.has("summarySectionFolds")) {
-            for (final var fold : root.getAsJsonObject("summarySectionFolds")
-                .entrySet()) {
-                final SummarySection section;
-                try {
-                    section = SummarySection.valueOf(fold.getKey());
-                } catch (final IllegalArgumentException ignored) {
-                    continue; // a section this build has dropped
-                }
-                if (fold.getValue()
-                    .getAsBoolean()) {
-                    set.collapsedSummarySections.add(section);
-                } else {
-                    set.collapsedSummarySections.remove(section);
-                }
-            }
-        }
         final JsonArray arr = root.getAsJsonArray("slots");
         for (final JsonElement elem : arr) {
             final JsonObject obj = elem.getAsJsonObject();
@@ -164,19 +139,57 @@ public final class Serializer {
                 .getAsString();
             // One unreadable chart costs that chart, not the save; the empty graph keeps slot
             // numbering in place.
+            SlotSet.Slot slot;
             try {
-                set.slots.add(
-                    new SlotSet.Slot(
-                        name,
-                        decode(
-                            obj.get("data")
-                                .getAsString())));
+                slot = new SlotSet.Slot(
+                    name,
+                    decode(
+                        obj.get("data")
+                            .getAsString()));
             } catch (final RuntimeException e) {
                 PlanNH.LOG.error("Slot '{}' could not be read and was left empty", name, e);
-                set.slots.add(new SlotSet.Slot(name, new Graph()));
+                slot = new SlotSet.Slot(name, new Graph());
             }
+            if (obj.has("sectionFolds")) {
+                foldsFromJson(obj.getAsJsonObject("sectionFolds"), slot.collapsedSummarySections);
+            }
+            set.slots.add(slot);
         }
         return set;
+    }
+
+    /**
+     * Every section, not just the folded ones: a section this save has never heard of has to be
+     * distinguishable from one the user deliberately left open, or adding a section would silently
+     * unfold it for everyone who had already saved.
+     */
+    private static JsonObject foldsToJson(final Set<SummarySection> folded) {
+        final JsonObject folds = new JsonObject();
+        for (final SummarySection section : SummarySection.values()) {
+            folds.addProperty(section.name(), folded.contains(section));
+        }
+        return folds;
+    }
+
+    /**
+     * Reads section by section over whatever {@code folded} already holds rather than replacing it:
+     * an unmentioned section is one the save predates, and it keeps the fold a fresh chart gives it.
+     */
+    private static void foldsFromJson(final JsonObject folds, final Set<SummarySection> folded) {
+        for (final var fold : folds.entrySet()) {
+            final SummarySection section;
+            try {
+                section = SummarySection.valueOf(fold.getKey());
+            } catch (final IllegalArgumentException ignored) {
+                continue; // a section this build has dropped
+            }
+            if (fold.getValue()
+                .getAsBoolean()) {
+                folded.add(section);
+            } else {
+                folded.remove(section);
+            }
+        }
     }
 
     /**

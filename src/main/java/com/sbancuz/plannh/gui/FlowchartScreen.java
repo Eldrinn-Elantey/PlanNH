@@ -189,7 +189,10 @@ public class FlowchartScreen extends ModularScreen {
                                     return true;
                                 }))
                         .child(
-                            IKey.str("Slot " + (PlanAPI.getSlotSet().activeSlot + 1))
+                            // Dynamic, and read off the live SlotSet: built as a plain string this
+                            // label kept whichever slot was active when the screen opened, so the
+                            // arrows moved the canvas underneath a number that never followed.
+                            IKey.dynamicKey(() -> IKey.str(slotLabel()))
                                 .asWidget()
                                 .color(Color.WHITE.main))
                         .child(
@@ -362,6 +365,13 @@ public class FlowchartScreen extends ModularScreen {
 
     // ── Slot bar helpers ──
 
+    /** "Slot (4/8)": which chart is on screen, and how many there are to page through. */
+    private static String slotLabel() {
+        final SlotSet set = PlanAPI.getSlotSet();
+        final int count = Math.max(1, set.slots.size());
+        return "Slot (" + Math.min(count, set.activeSlot + 1) + "/" + count + ")";
+    }
+
     private static void shiftSlot(final CanvasWidget canvas, final int dir) {
         final SlotSet set = PlanAPI.getSlotSet();
         if (set.slots.size() <= 1) return;
@@ -496,7 +506,9 @@ public class FlowchartScreen extends ModularScreen {
 
         /** A null section is one that does not fold, and an unfoldable section is always open. */
         private boolean sectionOpen(@Nullable final SummarySection section) {
-            return section == null || !PlanAPI.getSlotSet().collapsedSummarySections.contains(section);
+            return section == null || !PlanAPI.getSlotSet()
+                .getActiveSummaryFolds()
+                .contains(section);
         }
 
         /** Header plus, when the section is open, one line per body row. */
@@ -625,16 +637,28 @@ public class FlowchartScreen extends ModularScreen {
         }
 
         /**
-         * The heading takes the colour of the loudest message under it: folded by default, the bar
-         * is all the user sees, so it has to carry whether anything down there is on fire.
+         * The loudest thing the solver said, which is what the heading has to carry: an alarming
+         * bar over three informational notes cries wolf, and the next real warning reads as more
+         * of the same.
          */
-        private static int loudestColor(final BalanceResult br) {
+        private static AutoBalancer.Severity loudest(final BalanceResult br) {
             AutoBalancer.Severity worst = AutoBalancer.Severity.INFO;
             for (final String note : br.notes()) {
                 final AutoBalancer.Severity severity = AutoBalancer.Severity.of(note);
                 if (severity.ordinal() < worst.ordinal()) worst = severity;
             }
-            return severityColor(worst);
+            return worst;
+        }
+
+        /** Section bar behind the messages heading: the alarming one only when something is wrong. */
+        private static int loudestHeaderColor(final AutoBalancer.Severity worst) {
+            return worst == AutoBalancer.Severity.INFO ? PlannhColors.SECTION_OPS.getColor()
+                : PlannhColors.SECTION_WARN.getColor();
+        }
+
+        /** Heading text, which unlike a message line has to stay legible against its own bar. */
+        private static int loudestTitleColor(final AutoBalancer.Severity worst) {
+            return worst == AutoBalancer.Severity.INFO ? PlannhColors.ACCENT_BLUE.getColor() : severityColor(worst);
         }
 
         @Override
@@ -711,14 +735,15 @@ public class FlowchartScreen extends ModularScreen {
 
             wrapNotes(br);
             if (!wrappedMessages.isEmpty()) {
+                final AutoBalancer.Severity worst = loudest(br);
                 ly = drawSectionHeader(
                     ly,
                     w,
                     SummarySection.MESSAGES,
                     "Solver Messages (" + br.notes()
                         .size() + ")",
-                    PlannhColors.SECTION_WARN.getColor(),
-                    loudestColor(br));
+                    loudestHeaderColor(worst),
+                    loudestTitleColor(worst));
                 if (sectionOpen(SummarySection.MESSAGES)) {
                     for (final MessageLine line : wrappedMessages) {
                         GuiDraw.drawText(line.text(), ITEM_TEXT_X, ly, NOTE_SCALE, line.color(), false);
@@ -936,7 +961,8 @@ public class FlowchartScreen extends ModularScreen {
 
             for (final var header : headerRows.entrySet()) {
                 if (my < header.getValue()[0] || my >= header.getValue()[1]) continue;
-                final var folded = PlanAPI.getSlotSet().collapsedSummarySections;
+                final var folded = PlanAPI.getSlotSet()
+                    .getActiveSummaryFolds();
                 if (!folded.add(header.getKey())) folded.remove(header.getKey());
                 PlanAPI.save();
                 size(WIDTH, computeHeight(displayedSummary(g0.summary(), br0), br0));

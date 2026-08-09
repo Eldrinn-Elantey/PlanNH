@@ -12,12 +12,26 @@ public class SlotSet {
     public static final int DEFAULT_SUMMARY_X = 210;
     public static final int DEFAULT_SUMMARY_Y = 46;
 
+    /**
+     * Sections a fresh chart folds away: the reference material, not the answer. Solver messages
+     * stay open - a chart that failed to balance has to say so without being asked.
+     */
+    public static EnumSet<SummarySection> defaultSummaryFolds() {
+        return EnumSet.of(SummarySection.MACHINE_COUNTS, SummarySection.STATISTICS, SummarySection.HELP);
+    }
+
     public static class Slot {
 
         public String name;
         public Graph graph;
         /** Per-slot and session-only: edits also arrive from the NEI overlay with no screen open. */
         public final transient UndoHistory undoHistory = new UndoHistory();
+        /**
+         * Per slot rather than per set: a fold says "not on this chart", and the next chart is a
+         * different question. Inherited globally, one unfolded panel followed the user into every
+         * chart they opened afterwards and there was no way back to the defaults.
+         */
+        public final EnumSet<SummarySection> collapsedSummarySections = defaultSummaryFolds();
 
         public Slot(final String name, final Graph graph) {
             this.name = name;
@@ -31,9 +45,6 @@ public class SlotSet {
     public int summaryY = DEFAULT_SUMMARY_Y;
     public boolean summaryCollapsed = false;
     public SummaryMode summaryMode = SummaryMode.CYCLES;
-    /** Sections folded away in the summary panel: the reference material, not the answer. */
-    public final EnumSet<SummarySection> collapsedSummarySections = EnumSet
-        .of(SummarySection.MACHINE_COUNTS, SummarySection.STATISTICS, SummarySection.MESSAGES, SummarySection.HELP);
 
     /** Clamps activeSlot and guarantees a slot exists. */
     private Slot activeSlot() {
@@ -56,5 +67,10 @@ public class SlotSet {
 
     public UndoHistory getActiveUndoHistory() {
         return activeSlot().undoHistory;
+    }
+
+    /** The summary folds of the chart on screen; mutated in place by the panel's headers. */
+    public EnumSet<SummarySection> getActiveSummaryFolds() {
+        return activeSlot().collapsedSummarySections;
     }
 }
