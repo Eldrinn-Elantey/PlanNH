@@ -1,6 +1,7 @@
 package com.sbancuz.plannh.data.flowchart;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,9 +19,26 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
      */
     private static final float NET_EPS = 1e-4f;
 
+    private static final Comparator<Line<?>> BY_AMOUNT = Comparator.comparingDouble((Line<?> l) -> l.amount())
+        .thenComparing(Line::displayName);
+
     public enum SummaryMode {
         CYCLES,
         THROUGHPUT
+    }
+
+    /**
+     * The summary panel's foldable sections, in the order they are drawn. Only the reference
+     * material folds: the choices, inputs and outputs above them ARE the answer the panel exists
+     * to give, so they have no fold state to keep and are not listed here.
+     */
+    public enum SummarySection {
+        MACHINE_COUNTS,
+        /** Drawn from {@link Summary#properties()}; "Statistics" is what a reader calls them. */
+        STATISTICS,
+        /** Everything the solver had to say, at every severity. */
+        MESSAGES,
+        HELP
     }
 
     public record Line<T> (RecipeProperty<T> label, T resource, float amount) {
@@ -136,11 +154,16 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
             propertyMap.merge(new LineKey.PropertyKey(entry.getKey()), (float) entry.getValue(), Float::sum);
         }
 
-        return new Summary(flatten(outputMap), flatten(inputMap), flatten(propertyMap));
+        // Opposite ways on purpose: an output list leads with the headline product, an input list
+        // with the scarcest ingredient. Name breaks ties, or equal flows shuffle between frames.
+        return new Summary(
+            flatten(outputMap, BY_AMOUNT.reversed()),
+            flatten(inputMap, BY_AMOUNT),
+            flatten(propertyMap, BY_AMOUNT));
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static List<Line<?>> flatten(final Map<LineKey, Float> map) {
+    private static List<Line<?>> flatten(final Map<LineKey, Float> map, final Comparator<Line<?>> order) {
         final List<Line<?>> result = new ArrayList<>();
         for (final var entry : map.entrySet()) {
             if (entry.getValue() <= 0) continue;
@@ -150,6 +173,7 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
             };
             result.add(line);
         }
+        result.sort(order);
         return result;
     }
 }

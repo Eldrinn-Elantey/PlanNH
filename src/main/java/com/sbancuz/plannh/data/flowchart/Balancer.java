@@ -74,10 +74,10 @@ public final class Balancer {
                 // Expected state, not an error: an unpinned chart is just wiring, so it gets
                 // no quantities at all rather than numbers derived from an anchor nobody set.
                 PlanNH.LOG.info("Auto balance idle: {}", result.failure());
-                return unbalanced(graph, result.failure());
+                return unbalanced(graph, AutoBalancer.Severity.INFO.on(result.failure()));
             }
             PlanNH.LOG.warn("Auto balance failed ({}); showing the chart without quantities", result.failure());
-            return unbalanced(graph, "balance failed: " + result.failure());
+            return unbalanced(graph, AutoBalancer.Severity.ERROR.on("balance failed: " + result.failure()));
         }
         final AutoBalancer.Solution solution = result.solution();
         for (final String note : solution.notes()) {

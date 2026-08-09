@@ -2,12 +2,15 @@ package com.sbancuz.plannh.data.flowchart;
 
 import static com.sbancuz.plannh.data.flowchart.AutoBalancer.MIN_MODEL_MILLIS;
 import static com.sbancuz.plannh.data.flowchart.AutoBalancer.MISSING_EDGE;
+import static com.sbancuz.plannh.data.flowchart.AutoBalancer.Severity.INFO;
+import static com.sbancuz.plannh.data.flowchart.AutoBalancer.Severity.WARN;
 import static com.sbancuz.plannh.data.flowchart.AutoBalancer.TIE_REL;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +22,7 @@ import org.ojalgo.optimisation.Variable;
 import org.ojalgo.optimisation.integer.IntegerStrategy;
 import org.ojalgo.type.context.NumberContext;
 
+import com.sbancuz.plannh.Config;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.flowchart.AutoBalancer.Alternative;
 import com.sbancuz.plannh.data.flowchart.AutoBalancer.Attempt;
@@ -225,10 +229,12 @@ final class FlowModel {
             final double actual = chosenExtent * qty;
             if (actual > t.getValue() * (1 + TIE_REL)) {
                 notes.add(
-                    "'" + m.node.machineName
-                        + "' output "
-                        + t.getKey()
-                        + " overshoots its target: "
+                    WARN.tag() + "'"
+                        + m.node.machineName
+                        + "' overshoots its "
+                        + m.node.outputs.get(t.getKey())
+                            .getDisplayName()
+                        + " target: "
                         + actual
                         + "/s produced for a target of "
                         + t.getValue()
@@ -726,17 +732,29 @@ final class FlowModel {
      * another terminal); (2) a gated source whose ingredient is produced in a DIFFERENT
      * edge-connected component (two unlinked islands of the same fluid). Same-component
      * gated sources are the normal deficit case (e.g. the loopGraph source) and stay quiet.
+     *
+     * <p>
+     * Severities differ because the two smells do: taking an ingredient from outside while the
+     * chart also makes some is routine (nobody wires every input), so smell 1 is an observation.
+     * Two unlinked islands of the SAME ingredient is a chart that does not describe one factory,
+     * so smell 2 is a warning. Ingredients the pack gives away are filtered out of both -
+     * see {@link Config#isFreeIngredient}.
      */
     private List<String> wiringDiagnostics(final Attempt attempt, final double tol, final List<External> terminalIn) {
-        final List<String> result = new ArrayList<>();
+        // A set: the same ingredient imported at two ports of the same machine is one wiring
+        // mistake to the reader, and the message that describes it is identical either way.
+        final Set<String> result = new LinkedHashSet<>();
         for (final External in : terminalIn) {
+            final String ingredient = ingredientNameOf(in);
+            if (Config.isFreeIngredient(ingredient)) continue;
             final String match = findProduction(in, -1);
             if (match != null) {
                 result.add(
-                    "'" + machineNameOf(in)
+                    INFO.tag() + "'"
+                        + machineNameOf(in)
                         + "' imports "
-                        + portNameOf(in)
-                        + " externally, but the chart also produces it at '"
+                        + ingredient
+                        + " externally, but is produced at '"
                         + match
                         + "' - "
                         + MISSING_EDGE);
@@ -748,19 +766,22 @@ final class FlowModel {
             final External src = new External(
                 new PortRef(machines.get(port.machine()).node.id, port.portIndex(), port.input()),
                 attempt.externals[p]);
+            final String ingredient = ingredientNameOf(src);
+            if (Config.isFreeIngredient(ingredient)) continue;
             final String match = findProduction(src, portComponent[p]);
             if (match != null) {
                 result.add(
-                    "'" + machineNameOf(src)
+                    WARN.tag() + "'"
+                        + machineNameOf(src)
                         + "' sources "
-                        + portNameOf(src)
+                        + ingredient
                         + " externally, but an unlinked part of the chart produces it at '"
                         + match
                         + "' - "
                         + MISSING_EDGE);
             }
         }
-        return result;
+        return List.copyOf(result);
     }
 
     /**
@@ -810,10 +831,9 @@ final class FlowModel {
                     .nodeId())).node.machineName;
     }
 
-    private String portNameOf(final External e) {
-        return (e.port()
-            .input() ? "input " : "output ") + e.port()
-                .portIndex();
+    /** The ingredient at a port, named the way the rest of the GUI names it. */
+    private String ingredientNameOf(final External e) {
+        return portOf(e).getDisplayName();
     }
 
     private void collectTerminals(final int m, final MachineData md, final int portCount, final boolean input,
