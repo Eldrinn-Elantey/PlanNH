@@ -5,7 +5,6 @@ import static com.sbancuz.plannh.data.flowchart.AutoBalancer.MISSING_EDGE;
 import static com.sbancuz.plannh.data.flowchart.AutoBalancer.TIE_REL;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -76,16 +75,13 @@ final class FlowModel {
 
     FlowModel(final Graph graph, final Map<UUID, Double> extraExtentPins, final Budget budget) {
         this.budget = budget;
-        final List<Node> nodes = new ArrayList<>(graph.getNodes());
-        nodes.sort(Comparator.comparing(n -> n.id));
-        for (final Node node : nodes) {
+        // Graph hands nodes and edges back in id order, so nothing is sorted here.
+        for (final Node node : graph.getNodes()) {
             machineIndex.put(node.id, machines.size());
             machines.add(new MachineData(node));
         }
 
-        final List<Edge> graphEdges = new ArrayList<>(graph.getEdges());
-        graphEdges.sort(Comparator.comparing(e -> e.id));
-        for (final Edge edge : graphEdges) {
+        for (final Edge edge : graph.getEdges()) {
             final Integer src = machineIndex.get(edge.sourceNodeId);
             final Integer dst = machineIndex.get(edge.targetNodeId);
             if (src == null || dst == null) continue;

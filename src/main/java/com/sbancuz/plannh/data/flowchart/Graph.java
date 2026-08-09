@@ -1,9 +1,9 @@
 package com.sbancuz.plannh.data.flowchart;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import lombok.Getter;
@@ -12,10 +12,16 @@ import lombok.Setter;
 public class Graph {
 
     // TODO make these use getters
-    public final Map<UUID, Node> nodes = new HashMap<>();
-    public final Map<UUID, Edge> edges = new HashMap<>();
-    public final Map<UUID, Note> notes = new HashMap<>();
-    public final Map<UUID, Group> groups = new HashMap<>();
+    /**
+     * Sorted, so the graph hands its contents back in id order and every consumer that needs a
+     * reproducible answer gets one without sorting first. The solver used to re-sort both of these
+     * on every solve; keeping the rule on the field means it holds for the serializer, the router
+     * and the layout too, which were all reading whatever order the hash buckets happened to give.
+     */
+    public final SortedMap<UUID, Node> nodes = new TreeMap<>();
+    public final SortedMap<UUID, Edge> edges = new TreeMap<>();
+    public final SortedMap<UUID, Note> notes = new TreeMap<>();
+    public final SortedMap<UUID, Group> groups = new TreeMap<>();
 
     @Getter
     @Setter

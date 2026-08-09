@@ -39,6 +39,9 @@ import gregtech.nei.GTNEIDefaultHandler.CachedDefaultRecipe;
 
 public class GTProvider implements PropertyProvider {
 
+    /** GT5u stores a chance as 1..10000, where 10000 is 100%. Not 100 - it has been changed to 100 before. */
+    private static final float GT_CHANCE_SCALE = 10_000f;
+
     public static final RecipeProperty<Integer> SPECIAL_VALUE = RecipeProperty.<Integer>builder("special_value", 0)
         .build();
     static final RecipeProperty<Integer> GLASS_TIER = RecipeProperty.<Integer>builder("bartworks.glass_tier", 3)
@@ -284,7 +287,7 @@ public class GTProvider implements PropertyProvider {
                 new Port<>(
                     RecipePropertyAPI.ITEM,
                     r.mInputs[i].copy(),
-                    r.mInputChances != null ? r.mInputChances[i] / 10000.0f : 1.f));
+                    r.mInputChances != null ? r.mInputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mOutputs.length; i++) {
             if (r.mOutputs[i] == null) continue;
@@ -292,7 +295,7 @@ public class GTProvider implements PropertyProvider {
                 new Port<>(
                     RecipePropertyAPI.ITEM,
                     r.mOutputs[i].copy(),
-                    r.mOutputChances != null ? r.mOutputChances[i] / 10000.0f : 1.f));
+                    r.mOutputChances != null ? r.mOutputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mFluidInputs.length; i++) {
             if (r.mFluidInputs[i] == null || r.mFluidInputs[i].amount <= 0) continue;
@@ -300,7 +303,7 @@ public class GTProvider implements PropertyProvider {
                 new Port<>(
                     RecipePropertyAPI.FLUID,
                     r.mFluidInputs[i].copy(),
-                    r.mFluidInputChances != null ? r.mFluidInputChances[i] / 10000.0f : 1.f));
+                    r.mFluidInputChances != null ? r.mFluidInputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mFluidOutputs.length; i++) {
             if (r.mFluidOutputs[i] == null) continue;
@@ -308,7 +311,7 @@ public class GTProvider implements PropertyProvider {
                 new Port<>(
                     RecipePropertyAPI.FLUID,
                     r.mFluidOutputs[i].copy(),
-                    r.mFluidOutputChances != null ? r.mFluidOutputChances[i] / 10000.0f : 1.f));
+                    r.mFluidOutputChances != null ? r.mFluidOutputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
 
         node.inputs.removeIf(p -> p.getValue() instanceof ItemStack stack && stack.getItem() instanceof ItemFluidDisplay);

@@ -526,7 +526,12 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         // Both directions read the balance's effective totals so exact rates sit next to exact
         // rates on the same node.
         final float total = effectiveTotal(nb, index, output, port.getAmount());
-        String label = GuiHelper.formatRate(total / sec) + "/s " + port.getDisplayName();
+        // The port's own formatter, not a bare number: the summary and the boundary chips spell a
+        // fluid in mB and B, and a node body that spells the same flow in bare litres reads as a
+        // different quantity.
+        String label = port.getType()
+            .formatAmount(total / sec) + "/s "
+            + port.getDisplayName();
         if (output && port.getChance() < 0.999f) {
             label += " (" + Math.round(port.getAmount() * port.getChance() * 100) + "%)";
         }
@@ -706,7 +711,9 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         final FontRenderer font = Minecraft.getMinecraft().fontRenderer;
         for (final int idx : targetableOutputs()) {
             final double current = node.targetOutputRates.getOrDefault(idx, 0.0);
-            final String value = current > 0 ? GuiHelper.formatRate((float) current) + "/s" : "off";
+            final String value = current > 0 ? node.outputs.get(idx)
+                .getType()
+                .formatAmount((float) current) + "/s" : "off";
             final int valueW = font.getStringWidth(value);
             final String label = font.trimStringToWidth(
                 "Tgt " + node.outputs.get(idx)

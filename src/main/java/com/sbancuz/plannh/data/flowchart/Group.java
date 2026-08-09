@@ -3,9 +3,9 @@ package com.sbancuz.plannh.data.flowchart;
 import static com.sbancuz.plannh.gui.GroupWidget2.GROUP_MIN_H;
 import static com.sbancuz.plannh.gui.GroupWidget2.GROUP_MIN_W;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Random;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import org.jetbrains.annotations.NotNull;
@@ -27,8 +27,14 @@ public class Group extends GraphData {
     private boolean collapsed;
     private boolean clampNodes;
     private boolean coverChildren;
+    /**
+     * Sorted for the same reason the graph's own maps are, and for one more: Gson builds a
+     * SortedMap field as a TreeMap but a plain Map keyed on anything but String as an
+     * insertion-ordered LinkedTreeMap, so a group used to iterate one way when built and another
+     * way after a save and reload.
+     */
     @NotNull
-    private final Map<UUID, GraphData> children = new HashMap<>();
+    private final SortedMap<UUID, GraphData> children = new TreeMap<>();
 
     public Group() {
         super(UUID.randomUUID());

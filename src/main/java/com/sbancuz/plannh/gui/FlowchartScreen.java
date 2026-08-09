@@ -464,6 +464,15 @@ public class FlowchartScreen extends ModularScreen {
         private final List<int[]> choiceRows = new ArrayList<>();
         private int choicesHeaderY = -1;
 
+        /**
+         * Word-wrapped notes, held against the balance that produced them. Wrapping runs the font
+         * renderer over every note and is asked for twice a frame - once to measure the panel and
+         * again to draw it - where the notes only change when the chart is re-solved. The balance
+         * object's identity is the same "has it been re-solved" proxy the router uses.
+         */
+        private BalanceResult wrappedFor;
+        private List<String> wrapped = List.of();
+
         private boolean choicesOffered(final BalanceResult br) {
             return BalanceView.hasChoices(graph());
         }
@@ -511,7 +520,7 @@ public class FlowchartScreen extends ModularScreen {
             }
             if (!br.notes()
                 .isEmpty()) {
-                h += SECTION_H + wrapNotes(br.notes()).size() * LINE_H + SECTION_END_PAD;
+                h += SECTION_H + wrapNotes(br).size() * LINE_H + SECTION_END_PAD;
             }
             h += SECTION_LY_OFFSET + TOTALS_LINE_H + 1 + HELP_LINE_H;
             h += MODE_LINE_H + HELP_LINE_H * 5;
@@ -546,16 +555,19 @@ public class FlowchartScreen extends ModularScreen {
         }
 
         /** Solver notes, word-wrapped to the summary width at the item text scale. */
-        private static List<String> wrapNotes(final List<String> notes) {
+        private List<String> wrapNotes(final BalanceResult br) {
+            if (br == wrappedFor) return wrapped;
             final List<String> lines = new ArrayList<>();
             final int wrapWidth = (int) ((WIDTH - ITEM_TEXT_X - 4) / NOTE_SCALE);
-            for (final String note : notes) {
+            for (final String note : br.notes()) {
                 for (final Object line : Minecraft.getMinecraft().fontRenderer
                     .listFormattedStringToWidth("- " + note, wrapWidth)) {
                     lines.add((String) line);
                 }
             }
-            return lines;
+            wrappedFor = br;
+            wrapped = List.copyOf(lines);
+            return wrapped;
         }
 
         @Override
@@ -704,7 +716,7 @@ public class FlowchartScreen extends ModularScreen {
                     PlannhColors.ACCENT_AMBER.getColor(),
                     false);
                 ly += SECTION_H;
-                for (final String line : wrapNotes(br.notes())) {
+                for (final String line : wrapNotes(br)) {
                     GuiDraw.drawText(line, ITEM_TEXT_X, ly, NOTE_SCALE, PlannhColors.ACCENT_AMBER.getColor(), false);
                     ly += LINE_H;
                 }

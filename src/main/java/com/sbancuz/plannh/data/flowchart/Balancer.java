@@ -112,28 +112,21 @@ public final class Balancer {
     @Nonnull
     private static BalanceResult solveILPOrFallback(final Graph graph, final BalanceMode mode, final boolean opsMode) {
         final Map<UUID, Integer> ilpOps = balanceILP(graph, mode, opsMode);
-        if (ilpOps != null) {
-            return buildResult(graph, ilpOps);
+        if (ilpOps == null) {
+            return balanceNone(graph);
         }
-        return balanceNone(graph);
+        final Map<UUID, Double> counts = new HashMap<>(ilpOps.size());
+        ilpOps.forEach((id, ops) -> counts.put(id, (double) ops));
+        return buildResultFractional(graph, counts, List.of(), null, null);
     }
 
     @Nonnull
     private static BalanceResult balanceNone(final Graph graph) {
-        final Map<UUID, Integer> ops = new HashMap<>();
+        final Map<UUID, Double> counts = new HashMap<>();
         for (final Node node : graph.getNodes()) {
-            ops.put(node.id, node.machineConfig.getMachineCount());
+            counts.put(node.id, (double) node.machineConfig.getMachineCount());
         }
-        return buildResult(graph, ops);
-    }
-
-    @Nonnull
-    static BalanceResult buildResult(final Graph graph, final Map<UUID, Integer> ops) {
-        final Map<UUID, Double> fractional = new HashMap<>(ops.size());
-        for (final Map.Entry<UUID, Integer> entry : ops.entrySet()) {
-            fractional.put(entry.getKey(), (double) entry.getValue());
-        }
-        return buildResultFractional(graph, fractional, List.of(), null, null);
+        return buildResultFractional(graph, counts, List.of(), null, null);
     }
 
     /**

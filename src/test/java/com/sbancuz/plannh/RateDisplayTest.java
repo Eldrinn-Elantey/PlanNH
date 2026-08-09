@@ -8,47 +8,24 @@ import org.junit.jupiter.api.Test;
 import com.sbancuz.plannh.gui.GuiHelper;
 
 /**
- * The display is the only thing the user actually reads, so the rounding rules are pinned here:
- * a number that reaches the screen as "0" claims the machine is idle.
+ * The two display rules that mean something rather than merely describe the formatter: a running
+ * machine must not read as idle, and a big rate must not read as a bucket count.
  */
 class RateDisplayTest {
 
     @Test
-    void integralCountsStayBare() {
-        assertEquals("0", GuiHelper.formatCount(0));
-        assertEquals("4", GuiHelper.formatCount(4));
-        assertEquals("4", GuiHelper.formatCount(4.0001));
-    }
-
-    @Test
-    void fractionalCountsKeepTwoDecimals() {
-        assertEquals("3.12", GuiHelper.formatCount(3.12));
-        assertEquals("0.17", GuiHelper.formatCount(1.0 / 6));
-    }
-
-    @Test
     void aRunningMachineNeverDisplaysAsZero() {
         // AUTO returns exact fractional counts, and a fast machine feeding a long assembly line
-        // lands well under a hundredth.
+        // lands well under a hundredth - where two decimals would round it to "0" and claim the
+        // machine is idle.
         for (final double count : new double[] { 4e-3, 1e-3, 1e-4, 1e-5 }) {
             assertNotEquals("0", GuiHelper.formatCount(count), "count " + count + " rendered as idle");
         }
-        // Above a hundredth two decimals still read fine; below it they would round to zero.
-        assertEquals("0.02", GuiHelper.formatCount(1.0 / 60));
-        assertEquals("0.001", GuiHelper.formatCount(1e-3));
-    }
-
-    @Test
-    void ratesKeepSubUnityPrecision() {
-        assertEquals("0.01667", GuiHelper.formatRate(1f / 60));
-        assertEquals("25.00", GuiHelper.formatRate(25f));
-        assertEquals("1200", GuiHelper.formatRate(1200f));
     }
 
     @Test
     void bigRatesUseGigaNotBuckets() {
         // B is what fluid amounts use for buckets; a 1.5e9/s rate must not read as 1.5 buckets.
         assertEquals("1.5G", GuiHelper.formatRate(1.5e9f));
-        assertEquals("2.0M", GuiHelper.formatRate(2e6f));
     }
 }

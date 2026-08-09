@@ -10,12 +10,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
 import com.sbancuz.plannh.data.flowchart.AutoBalancer;
 import com.sbancuz.plannh.data.flowchart.AutoBalancer.Alternative;
 import com.sbancuz.plannh.data.flowchart.AutoBalancer.Rank;
+import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 
 /**
@@ -25,6 +27,37 @@ import com.sbancuz.plannh.harness.GtnhFlowLoader;
  * changed an answer.
  */
 class PreferenceOrderTest {
+
+    @Test
+    void theGraphHandsBackNodesAndEdgesInIdOrder() {
+        // FlowModel used to copy and re-sort both of these on every solve. It now consumes them
+        // straight, which is only correct while Graph keeps them sorted - and nothing else in the
+        // solver would notice a HashMap creeping back in until an answer moved.
+        for (final String chart : List.of("mk1", "230_platline", "two_decisions")) {
+            final Graph graph = GtnhFlowLoader.load(chart)
+                .graph();
+            final List<UUID> nodeIds = graph.getNodes()
+                .stream()
+                .map(n -> n.id)
+                .toList();
+            final List<UUID> edgeIds = graph.getEdges()
+                .stream()
+                .map(e -> e.id)
+                .toList();
+            assertEquals(
+                nodeIds.stream()
+                    .sorted()
+                    .toList(),
+                nodeIds,
+                chart + " node order");
+            assertEquals(
+                edgeIds.stream()
+                    .sorted()
+                    .toList(),
+                edgeIds,
+                chart + " edge order");
+        }
+    }
 
     @Test
     void everyRankTheSolverCanReturnHasAPlaceInTheList() {
