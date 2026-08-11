@@ -59,7 +59,7 @@ class GtnhFlowLoadTest {
         // 0.25s fusion recipe -> 5 ticks.
         final Node fusion = chart.machine(0);
         assertEquals("fusion reactor", fusion.machineName);
-        assertEquals(5, fusion.durationTicks);
+        assertEquals(5, fusion.properties.get(GtnhFlowLoader.DURATION_TICKS));
 
         // The target pin lands on the node itself: output 0 is the fuel, pinned at 10/s. The
         // count stays free - AUTO derives the exact fractional extent from the rate.

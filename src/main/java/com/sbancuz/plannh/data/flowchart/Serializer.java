@@ -26,7 +26,6 @@ import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.SettingDef;
-import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
 import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
@@ -87,77 +86,65 @@ public final class Serializer {
         }
     }
 
-    // ── SlotSet serialization ──
+    // ── Plan serialization ──
 
     /**
-     * Encodes a SlotSet (with all its graphs) to a JSON string.
+     * Encodes a Plan (with all its graphs) to a JSON string. Graph bodies are stored compressed,
+     * each with its slot name and summary section folds.
      */
     @Nonnull
-    public static String encode(final SlotSet set) {
-        final JsonObject root = new JsonObject();
-        root.addProperty("active", set.activeSlot);
-        root.addProperty("summaryX", set.summaryX);
-        root.addProperty("summaryY", set.summaryY);
-        root.addProperty("summaryCollapsed", set.summaryCollapsed);
-        root.addProperty("summaryMode", set.summaryMode.name());
+    public static String encodePlan(final Plan plan) {
+        final JsonObject root = GSON.toJsonTree(plan, Plan.class)
+            .getAsJsonObject();
+
         final JsonArray arr = new JsonArray();
-        for (final SlotSet.Slot slot : set.slots) {
+        for (final Graph graph : plan.getGraphs()) {
             final JsonObject slotObj = new JsonObject();
-            slotObj.addProperty("name", slot.name);
-            slotObj.addProperty("data", encode(slot.graph));
-            slotObj.add("sectionFolds", foldsToJson(slot.collapsedSummarySections));
+            slotObj.addProperty("name", graph.getName());
+            slotObj.addProperty("data", encode(graph));
+            slotObj.add("sectionFolds", foldsToJson(graph.collapsedSummarySections));
             arr.add(slotObj);
         }
-        root.add("slots", arr);
+        root.add("graphs", arr);
+
         return GSON.toJson(root);
     }
 
     /**
-     * Decodes a SlotSet (with all its graphs) from a JSON string.
+     * Decodes a Plan (with all its graphs) from a JSON string.
      */
     @Nonnull
-    public static SlotSet decodeSlotSet(final String json) {
+    public static Plan decodePlan(final String json) {
+        final Plan plan = GSON.fromJson(json, Plan.class);
+
+        // graphs need to be decoded
         final JsonObject root = GSON.fromJson(json, JsonObject.class);
-        final SlotSet set = new SlotSet();
-        set.activeSlot = root.get("active")
-            .getAsInt();
-        set.summaryX = root.has("summaryX") ? root.get("summaryX")
-            .getAsInt() : SlotSet.DEFAULT_SUMMARY_X;
-        set.summaryY = root.has("summaryY") ? root.get("summaryY")
-            .getAsInt() : SlotSet.DEFAULT_SUMMARY_Y;
-        set.summaryCollapsed = root.has("summaryCollapsed") && root.get("summaryCollapsed")
-            .getAsBoolean();
-        if (root.has("summaryMode")) {
-            try {
-                set.summaryMode = SummaryMode.valueOf(
-                    root.get("summaryMode")
-                        .getAsString());
-            } catch (final IllegalArgumentException ignored) {}
-        }
-        final JsonArray arr = root.getAsJsonArray("slots");
-        for (final JsonElement elem : arr) {
-            final JsonObject obj = elem.getAsJsonObject();
-            final String name = obj.get("name")
-                .getAsString();
-            // One unreadable chart costs that chart, not the save; the empty graph keeps slot
-            // numbering in place.
-            SlotSet.Slot slot;
-            try {
-                slot = new SlotSet.Slot(
-                    name,
-                    decode(
+        if (root.has("graphs")) {
+            for (final JsonElement elem : root.getAsJsonArray("graphs")) {
+                final JsonObject obj = elem.getAsJsonObject();
+                final String name = obj.has("name") ? obj.get("name")
+                    .getAsString() : "";
+                // One unreadable chart costs that chart, not the save; the empty graph keeps slot
+                // numbering in place.
+                Graph graph;
+                try {
+                    graph = decode(
                         obj.get("data")
-                            .getAsString()));
-            } catch (final RuntimeException e) {
-                PlanNH.LOG.error("Slot '{}' could not be read and was left empty", name, e);
-                slot = new SlotSet.Slot(name, new Graph());
+                            .getAsString());
+                } catch (final RuntimeException e) {
+                    PlanNH.LOG.error("Slot '{}' could not be read and was left empty", name, e);
+                    graph = new Graph(name);
+                }
+                graph.setName(name);
+                if (obj.has("sectionFolds")) {
+                    foldsFromJson(obj.getAsJsonObject("sectionFolds"), graph.collapsedSummarySections);
+                }
+                plan.getGraphs()
+                    .add(graph);
             }
-            if (obj.has("sectionFolds")) {
-                foldsFromJson(obj.getAsJsonObject("sectionFolds"), slot.collapsedSummarySections);
-            }
-            set.slots.add(slot);
         }
-        return set;
+
+        return plan;
     }
 
     /**
@@ -230,7 +217,7 @@ public final class Serializer {
                 .append("\n");
         }
 
-        for (final Note note : graph.notes.values()) {
+        for (final Note note : graph.getNotes()) {
             sb.append("    %% Note: ");
             for (String s : note.getText()) sb.append(escapeMermaid(s))
                 .append("\n");
@@ -268,6 +255,7 @@ public final class Serializer {
         root.addProperty("zoom", graph.getZoom());
         root.addProperty("panX", graph.getPanX());
         root.addProperty("panY", graph.getPanY());
+        root.addProperty("name", graph.getName());
 
         final JsonArray nodesArray = new JsonArray();
         for (final Node node : graph.getNodes()) {
@@ -318,16 +306,22 @@ public final class Serializer {
         }
         root.add("edges", edgesArray);
 
-        root.add("notes", GSON.toJsonTree(graph.getNotes()));
+        final JsonArray notesArray = new JsonArray();
+        for (Note note : graph.getNotes()) notesArray.add(GSON.toJsonTree(note));
+        root.add("notes", notesArray);
 
-        root.add("groups", GSON.toJsonTree(graph.getGroups()));
+        final JsonArray groupsArray = new JsonArray();
+        for (Group group : graph.getGroups()) groupsArray.add(GSON.toJsonTree(group));
+        root.add("groups", groupsArray);
 
         return root;
     }
 
     @Nonnull
     private static Graph jsonToGraph(final JsonObject root) {
-        final Graph graph = new Graph();
+        final Graph graph = new Graph(
+            root.get("name")
+                .getAsString());
 
         if (root.has("balanceMode")) {
             try {
@@ -392,9 +386,6 @@ public final class Serializer {
             }
             node.handlerRecipeIndex = obj.has("handlerRecipeIndex") ? obj.get("handlerRecipeIndex")
                 .getAsInt() : 0;
-            node.setExtractorIndex(
-                obj.has("extractorIndex") ? obj.get("extractorIndex")
-                    .getAsInt() : 0);
             node.initExtractor();
             node.refresh();
 
@@ -454,14 +445,12 @@ public final class Serializer {
             graph.addEdge(new Edge(id, src, dst, srcOut, dstIn));
         }
 
-        final JsonArray notesArray = root.getAsJsonArray("notes");
-        for (final JsonElement elem : notesArray) {
+        for (final JsonElement elem : root.getAsJsonArray("notes")) {
             final Note note = GSON.fromJson(elem, Note.class);
             graph.notes.put(note.getId(), note);
         }
 
-        final JsonArray groupsArray = root.getAsJsonArray("groups");
-        for (final JsonElement elem : groupsArray) {
+        for (final JsonElement elem : root.getAsJsonArray("groups")) {
             final Group group = GSON.fromJson(elem, Group.class);
             graph.groups.put(group.getId(), group);
         }

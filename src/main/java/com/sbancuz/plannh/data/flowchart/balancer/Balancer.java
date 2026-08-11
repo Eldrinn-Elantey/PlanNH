@@ -10,11 +10,11 @@ import javax.annotation.Nullable;
 
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.data.MachineConfig;
-import com.sbancuz.plannh.data.RecipeProperty;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternatives;
 import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Enumerator;
+import com.sbancuz.plannh.data.properties.RecipeProperty;
 
 /**
  * The single entry point of the balancer package. Every {@link BalanceMode} is a {@link Chain}:
@@ -263,7 +263,7 @@ public final class Balancer {
             totalOps += count;
 
             final MachineConfig cfg = node.machineConfig;
-            final var eff = cfg.computeEffect(node.properties, node.durationTicks);
+            final var eff = cfg.computeEffect(node.properties);
             final long eutPerOp = eff.energyPerT();
             final int durPerOp = eff.durationTicks();
             final int throughputFactor = eff.throughputFactor();

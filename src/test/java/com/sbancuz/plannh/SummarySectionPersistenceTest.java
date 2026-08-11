@@ -7,8 +7,8 @@ import java.util.EnumSet;
 import org.junit.jupiter.api.Test;
 
 import com.sbancuz.plannh.data.flowchart.Graph;
+import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Serializer;
-import com.sbancuz.plannh.data.flowchart.SlotSet;
 import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
 
 /**
@@ -17,56 +17,68 @@ import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
  */
 class SummarySectionPersistenceTest {
 
-    private static SlotSet twoSlots() {
-        final SlotSet set = new SlotSet();
-        set.slots.add(new SlotSet.Slot("Slot 1", new Graph()));
-        set.slots.add(new SlotSet.Slot("Slot 2", new Graph()));
-        return set;
+    private static Plan twoSlots() {
+        final Plan plan = Plan.createEmpty();
+        plan.getGraphs()
+            .add(new Graph("Slot 2"));
+        return plan;
     }
 
     @Test
     void foldedSectionsSurviveEncodeDecodePerSlot() {
-        final SlotSet set = twoSlots();
-        set.slots.get(0).collapsedSummarySections.clear();
-        set.slots.get(0).collapsedSummarySections.add(SummarySection.MESSAGES);
-        set.slots.get(1).collapsedSummarySections.clear();
+        final Plan plan = twoSlots();
+        plan.getGraphs()
+            .get(0).collapsedSummarySections.clear();
+        plan.getGraphs()
+            .get(0).collapsedSummarySections.add(SummarySection.MESSAGES);
+        plan.getGraphs()
+            .get(1).collapsedSummarySections.clear();
 
-        final SlotSet decoded = Serializer.decodeSlotSet(Serializer.encode(set));
+        final Plan decoded = Serializer.decodePlan(Serializer.encodePlan(plan));
 
         assertEquals(
             EnumSet.of(SummarySection.MESSAGES),
-            decoded.slots.get(0).collapsedSummarySections,
+            decoded.getGraphs()
+                .get(0).collapsedSummarySections,
             "one chart's folds");
         assertEquals(
             EnumSet.noneOf(SummarySection.class),
-            decoded.slots.get(1).collapsedSummarySections,
+            decoded.getGraphs()
+                .get(1).collapsedSummarySections,
             "an explicitly empty set is 'everything open', not 'never saved'");
     }
 
     @Test
     void aNewSlotStartsFromTheDefaultsRatherThanTheLastChartsPanel() {
-        final SlotSet set = twoSlots();
-        set.slots.get(0).collapsedSummarySections.clear();
+        final Plan plan = twoSlots();
+        plan.getGraphs()
+            .get(0).collapsedSummarySections.clear();
 
-        set.slots.add(new SlotSet.Slot("Slot 3", new Graph()));
+        plan.getGraphs()
+            .add(new Graph("Slot 3"));
 
-        assertEquals(SlotSet.defaultSummaryFolds(), set.slots.get(2).collapsedSummarySections);
         assertEquals(
-            SlotSet.defaultSummaryFolds(),
-            Serializer.decodeSlotSet(Serializer.encode(set)).slots.get(2).collapsedSummarySections,
+            Graph.defaultSummaryFolds(),
+            plan.getGraphs()
+                .get(2).collapsedSummarySections);
+        assertEquals(
+            Graph.defaultSummaryFolds(),
+            Serializer.decodePlan(Serializer.encodePlan(plan))
+                .getGraphs()
+                .get(2).collapsedSummarySections,
             "and still does after a round trip");
     }
 
     /** Saves written before folds were per slot open every chart the way a fresh install would. */
     @Test
     void savesWithoutTheKeyKeepTheDefaults() {
-        final String json = Serializer.encode(twoSlots())
+        final String json = Serializer.encodePlan(twoSlots())
             .replace("\"sectionFolds\"", "\"unusedKey\"");
 
-        final SlotSet decoded = Serializer.decodeSlotSet(json);
+        final Plan decoded = Serializer.decodePlan(json);
 
-        for (final SlotSet.Slot slot : decoded.slots) {
-            assertEquals(SlotSet.defaultSummaryFolds(), slot.collapsedSummarySections);
+        for (final Graph graph : decoded.getGraphs()) {
+            assertEquals(Graph.defaultSummaryFolds(), graph.collapsedSummarySections);
         }
     }
 
@@ -76,19 +88,20 @@ class SummarySectionPersistenceTest {
      */
     @Test
     void aSectionTheSaveNeverHeardOfKeepsItsDefault() {
-        final SlotSet set = twoSlots();
-        for (final SlotSet.Slot slot : set.slots) {
-            slot.collapsedSummarySections.clear();
-            slot.collapsedSummarySections.add(SummarySection.STATISTICS);
+        final Plan plan = twoSlots();
+        for (final Graph graph : plan.getGraphs()) {
+            graph.collapsedSummarySections.clear();
+            graph.collapsedSummarySections.add(SummarySection.STATISTICS);
         }
-        final String json = Serializer.encode(set)
+        final String json = Serializer.encodePlan(plan)
             .replace("\"" + SummarySection.HELP.name() + "\"", "\"SECTION_FROM_A_LATER_BUILD\"");
 
-        final SlotSet decoded = Serializer.decodeSlotSet(json);
+        final Plan decoded = Serializer.decodePlan(json);
 
         assertEquals(
             EnumSet.of(SummarySection.STATISTICS, SummarySection.HELP),
-            decoded.slots.get(0).collapsedSummarySections,
+            decoded.getGraphs()
+                .get(0).collapsedSummarySections,
             "the unmentioned section keeps the default fold, the mentioned ones keep the save's");
     }
 
@@ -97,6 +110,6 @@ class SummarySectionPersistenceTest {
     void solverMessagesStartOpen() {
         assertEquals(
             EnumSet.of(SummarySection.MACHINE_COUNTS, SummarySection.STATISTICS, SummarySection.HELP),
-            SlotSet.defaultSummaryFolds());
+            Graph.defaultSummaryFolds());
     }
 }

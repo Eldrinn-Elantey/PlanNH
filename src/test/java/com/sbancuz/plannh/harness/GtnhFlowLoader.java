@@ -16,9 +16,11 @@ import org.yaml.snakeyaml.Yaml;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.Settings;
+import com.sbancuz.plannh.data.effect.EffectResult;
 import com.sbancuz.plannh.data.flowchart.Edge;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Node;
+import com.sbancuz.plannh.data.properties.RecipeProperty;
 
 /**
  * Loads gtnh-flow style YAML charts into PlanNH {@link Graph}s.
@@ -44,6 +46,13 @@ public final class GtnhFlowLoader {
     /** {@code outputIndex} is the resolved output port for target pins, -1 for number pins. */
     public record Pin(String kind, int machineIndex, String machineName, String ingredient, double value,
         int outputIndex) {}
+
+    /**
+     * Duration key for headless charts; the real one lives in {@code RecipePropertyAPI} but its
+     * static init touches Minecraft's FluidRegistry, which no headless test may do.
+     */
+    public static final RecipeProperty<Integer> DURATION_TICKS = RecipeProperty.builder("duration_ticks", 0)
+        .build();
 
     public record LoadedChart(String name, Graph graph, List<Node> machines, List<Pin> pins) {
 
@@ -73,7 +82,7 @@ public final class GtnhFlowLoader {
                     MachineProfileRegistry.defaultId(),
                     "Default",
                     List.of(Settings.MACHINES.def(), Settings.TICK_MODIFIER.def()),
-                    (s, ctx) -> new MachineProfile.EffectResult(ctx.recipeDuration(), 0, 1)));
+                    (s, ctx) -> new EffectResult(ctx.getOrDefault(DURATION_TICKS, 1), 0, 1)));
         }
     }
 
@@ -117,7 +126,8 @@ public final class GtnhFlowLoader {
 
             final Node node = new Node(nodeId(name, machineIndex), 0, 0);
             node.machineName = String.valueOf(entry.get("m"));
-            node.durationTicks = (int) Math.round(asDouble(entry.get("dur"), 1.0) * TICKS_PER_SECOND);
+            node.properties.put(DURATION_TICKS,
+                (int) Math.round(asDouble(entry.get("dur"), 1.0) * TICKS_PER_SECOND));
 
             for (final Map.Entry<String, Double> io : ioMap(entry.get("I")).entrySet()) {
                 consumers.computeIfAbsent(io.getKey(), k -> new ArrayList<>())

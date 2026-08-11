@@ -6,9 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.sbancuz.plannh.data.RecipeProperty;
-import com.sbancuz.plannh.data.RecipeResource;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
+import com.sbancuz.plannh.data.properties.ResourceProperty;
+import com.sbancuz.plannh.data.properties.SummaryProperty;
 
 public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>> properties) {
 
@@ -41,7 +41,7 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
         HELP
     }
 
-    public record Line<T> (RecipeProperty<T> label, T resource, float amount) {
+    public record Line<T> (SummaryProperty<T> label, T resource, float amount) {
 
         public String displayName() {
             return label.formatDisplayName(resource);
@@ -56,11 +56,11 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
     @SuppressWarnings("rawtypes")
     private sealed interface LineKey permits LineKey.ResourceKey,LineKey.PropertyKey {
 
-        record ResourceKey<T> (RecipeResource<T> type, T resource) implements LineKey {
+        record ResourceKey<T> (ResourceProperty<T> type, T resource) implements LineKey {
 
             @SuppressWarnings("unchecked")
             static ResourceKey<Object> of(final Port port) {
-                return new ResourceKey<>((RecipeResource<Object>) port.getType(), port.getValue());
+                return new ResourceKey<>((ResourceProperty<Object>) port.getType(), port.getValue());
             }
 
             Line<?> toLine(final float amount) {
@@ -70,7 +70,7 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
             @Override
             @SuppressWarnings("unchecked")
             public boolean equals(final Object o) {
-                return o instanceof ResourceKey<?>(RecipeResource<?> type1, Object resource1)
+                return o instanceof ResourceKey<?>(SummaryProperty<?> type1, Object resource1)
                     && type == type1
                     && type.canConnect(resource, (T) resource1);
             }
@@ -81,7 +81,7 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
             }
         }
 
-        record PropertyKey(RecipeProperty<?> prop) implements LineKey {}
+        record PropertyKey(SummaryProperty<?> prop) implements LineKey {}
     }
 
     public static Summary compute(final BalanceResult balance, final Graph graph, final boolean opsMode) {
@@ -151,7 +151,11 @@ public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>>
 
         for (final var entry : balance.propertyTotals()
             .entrySet()) {
-            propertyMap.merge(new LineKey.PropertyKey(entry.getKey()), (float) entry.getValue(), Float::sum);
+            if (!(entry.getKey() instanceof SummaryProperty<?>)) continue;
+            propertyMap.merge(
+                new LineKey.PropertyKey((SummaryProperty<?>) entry.getKey()),
+                (float) entry.getValue(),
+                Float::sum);
         }
 
         // Opposite ways on purpose: an output list leads with the headline product, an input list

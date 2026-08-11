@@ -2,13 +2,9 @@ package com.sbancuz.plannh.gui;
 
 import org.jetbrains.annotations.NotNull;
 
-import com.cleanroommc.modularui.api.widget.IWidget;
 import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
-import com.cleanroommc.modularui.widget.ParentWidget;
 import com.cleanroommc.modularui.widgets.textfield.BaseTextFieldWidget;
 import com.sbancuz.plannh.api.PlanAPI;
-
-import it.unimi.dsi.fastutil.Pair;
 
 public abstract class FlowchartTextFieldWidget extends BaseTextFieldWidget<FlowchartTextFieldWidget>
     implements IFlowchartDraggable {
@@ -64,18 +60,5 @@ public abstract class FlowchartTextFieldWidget extends BaseTextFieldWidget<Flowc
     @Override
     public FlowchartWidget<?, ?> getFlowchartParent() {
         return parent;
-    }
-
-    @Override
-    public Pair<Integer, Integer> dragOffset() {
-        int x = getArea().rx;
-        int y = getArea().ry;
-        IWidget parentWidget = getParent();
-        while (parentWidget instanceof ParentWidget<?>parentWidgetActual && parentWidget != parent) {
-            x += parentWidget.getArea().rx;
-            y += parentWidget.getArea().ry;
-            parentWidget = parentWidgetActual.getParent();
-        }
-        return Pair.of(x, y);
     }
 }

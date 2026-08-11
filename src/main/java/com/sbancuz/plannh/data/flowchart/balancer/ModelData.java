@@ -45,7 +45,7 @@ public final class ModelData {
         private Machine(final Node node) {
             this.node = node;
             final MachineConfig cfg = node.machineConfig;
-            final var eff = cfg.computeEffect(node.properties, node.durationTicks);
+            final var eff = cfg.computeEffect(node.properties);
             this.durTicks = Math.max(1, eff.durationTicks());
             final int tf = eff.throughputFactor();
             this.inQty = new double[node.inputs.size()];

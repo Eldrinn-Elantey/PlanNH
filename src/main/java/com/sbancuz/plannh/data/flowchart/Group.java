@@ -1,9 +1,7 @@
 package com.sbancuz.plannh.data.flowchart;
 
-import static com.sbancuz.plannh.gui.GroupWidget2.GROUP_MIN_H;
-import static com.sbancuz.plannh.gui.GroupWidget2.GROUP_MIN_W;
-
 import java.util.Random;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
@@ -18,6 +16,9 @@ import lombok.Setter;
 @Getter
 @Setter
 public class Group extends GraphData {
+
+    public static final int GROUP_MIN_W = 300;
+    public static final int GROUP_MIN_H = 200;
 
     private static Random colorRandom = new Random(12345);
 
@@ -35,6 +36,8 @@ public class Group extends GraphData {
      */
     @NotNull
     private final SortedMap<UUID, GraphData> children = new TreeMap<>();
+    @NotNull
+    private final Set<UUID> nodeIds = new java.util.HashSet<>();
 
     public Group() {
         super(UUID.randomUUID());

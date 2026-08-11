@@ -1,12 +1,9 @@
 package com.sbancuz.plannh.api;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 
 import net.minecraft.init.Blocks;
 import net.minecraft.item.ItemStack;
@@ -15,10 +12,12 @@ import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.oredict.OreDictionary;
 
+import com.google.common.collect.ArrayListMultimap;
 import com.sbancuz.plannh.Compat;
-import com.sbancuz.plannh.data.PropertyProvider;
-import com.sbancuz.plannh.data.RecipeProperty;
-import com.sbancuz.plannh.data.RecipeResource;
+import com.sbancuz.plannh.data.properties.PropertyProvider;
+import com.sbancuz.plannh.data.properties.RecipeProperty;
+import com.sbancuz.plannh.data.properties.ResourceProperty;
+import com.sbancuz.plannh.data.provider.DefaultProvider;
 import com.sbancuz.plannh.data.provider.gregtech.GTHooks;
 import com.sbancuz.plannh.gui.GuiHelper;
 import com.sbancuz.plannh.gui.IngredientColors;
@@ -26,12 +25,12 @@ import com.sbancuz.plannh.gui.PlannhColors;
 
 public final class RecipePropertyAPI {
 
-    private static final Map<String, List<PropertyProvider>> extractors = new HashMap<>();
+    private static final ArrayListMultimap<Class<?>, PropertyProvider> extractors = ArrayListMultimap.create();
 
     public static final RecipeProperty<Integer> DURATION_TICKS = RecipeProperty.<Integer>builder("duration_ticks", 0)
         .build();
 
-    public static final RecipeResource<ItemStack> ITEM = RecipeResource.builder("item", new ItemStack(Blocks.dirt))
+    public static final ResourceProperty<ItemStack> ITEM = ResourceProperty.builder("item", new ItemStack(Blocks.dirt))
         .displayFormatter(ItemStack::getDisplayName)
         .amountFormatter(GuiHelper::formatRate)
         .amountExtractor(stack -> stack.stackSize)
@@ -47,7 +46,7 @@ public final class RecipePropertyAPI {
         .arrowColor(PlannhColors.ARROW_ITEM.getColor())
         .build();
 
-    public static final RecipeResource<FluidStack> FLUID = RecipeResource
+    public static final ResourceProperty<FluidStack> FLUID = ResourceProperty
         .<FluidStack>builder("fluid", new FluidStack(FluidRegistry.WATER, 0, null))
         .displayFormatter(FluidStack::getLocalizedName)
         // Buckets past a thousand litres, litres below, and the same suffix table over whichever
@@ -95,25 +94,28 @@ public final class RecipePropertyAPI {
         return false;
     }
 
-    public static void registerExtractor(String overlayId, final PropertyProvider extractor) {
-        extractors.computeIfAbsent(overlayId, k -> new ArrayList<>())
-            .add(extractor);
+    public static void registerExtractor(final Class<?> handlerClass, final PropertyProvider extractor) {
+        extractors.put(handlerClass, extractor);
     }
 
     @Nonnull
-    public static List<PropertyProvider> getExtractors(String overlayId) {
-        return extractors.getOrDefault(overlayId, List.of());
+    public static List<PropertyProvider> getExtractors(final Class<?> handlerClass) {
+        final List<PropertyProvider> result = new ArrayList<>();
+        Class<?> clazz = handlerClass;
+        while (clazz != null) {
+            result.addAll(extractors.get(clazz));
+            clazz = clazz.getSuperclass();
+        }
+        return result;
     }
 
-    public static @Nullable PropertyProvider getExtractor(String overlayId) {
-        final List<PropertyProvider> list = extractors.get(overlayId);
-        return list != null && !list.isEmpty() ? list.getFirst() : null;
+    @Nonnull
+    public static PropertyProvider getExtractor(final Class<?> handlerClass) {
+        final List<PropertyProvider> list = getExtractors(handlerClass);
+        return list.isEmpty() ? DefaultProvider.INSTANCE : list.getFirst();
     }
 
     public static void reset() {
-        for (var ex : extractors.values()) {
-            ex.clear();
-        }
         extractors.clear();
     }
 }

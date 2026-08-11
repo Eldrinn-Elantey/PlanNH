@@ -30,9 +30,9 @@ import com.cleanroommc.modularui.theme.WidgetThemeEntry;
 import com.cleanroommc.modularui.utils.Alignment;
 import com.cleanroommc.modularui.utils.Color;
 import com.cleanroommc.modularui.value.DoubleValue;
+import com.cleanroommc.modularui.value.StringValue;
 import com.cleanroommc.modularui.widget.Widget;
 import com.cleanroommc.modularui.widget.sizer.Area;
-import com.cleanroommc.modularui.widget.sizer.Unit;
 import com.cleanroommc.modularui.widgets.ButtonWidget;
 import com.cleanroommc.modularui.widgets.ListWidget;
 import com.cleanroommc.modularui.widgets.layout.Flow;
@@ -43,7 +43,7 @@ import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.api.PlanAPI;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Node;
-import com.sbancuz.plannh.data.flowchart.SlotSet;
+import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
 import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
@@ -64,76 +64,37 @@ import codechicken.nei.guihook.GuiContainerManager;
 public class FlowchartScreen extends ModularScreen {
 
     private static final int LEFT_MARGIN = 5;
+    private static final int RIGHT_MARGIN = 15;
     private static final int TOP_MARGIN = 30;
     private static final int BOTTOM_MARGIN = 30;
 
-    @Nonnull
-    public final Graph graph;
-    @Nonnull
-    public final CanvasWidget canvas;
+    public static CanvasWidget canvas;
 
-    private FlowchartScreen(final ModularPanel panel, final Graph graph, final CanvasWidget canvas) {
+    private FlowchartScreen(final ModularPanel panel) {
         super(PlanNH.MODID, panel);
         getContext().setSettings(new UISettings());
         getContext().getUISettings()
             .getRecipeViewerSettings()
             .enable();
-        this.graph = graph;
-        this.canvas = canvas;
-    }
-
-    private static double panelRight() {
-        return Minecraft.getMinecraft().currentScreen.width - LayoutManager.itemPanel.x + 8;
     }
 
     public static FlowchartScreen create() {
-        final Graph graph = PlanAPI.getActiveGraph();
-
         final ModularPanel panel = ModularPanel.defaultPanel("flowchart_main")
             .fullScreenInvisible()
-            .marginLeft(LEFT_MARGIN)
+            .left(LEFT_MARGIN)
             .marginBottom(BOTTOM_MARGIN)
             .marginTop(TOP_MARGIN)
-            .widthRel(0.75f)
-            .right(FlowchartScreen::panelRight, Unit.Measure.PIXEL);
+            .widthRelOffset(
+                () -> (double) (LayoutManager.itemPanel.x - RIGHT_MARGIN)
+                    / Minecraft.getMinecraft().currentScreen.width,
+                0);
 
         final Flow mainColumn = Flow.column()
             .full();
 
         Menu<?> contextMenu = new Menu<>();
-        final CanvasWidget canvas = new CanvasWidget(graph, contextMenu);
 
-        contextMenu.setEnabledIf(_ -> canvas.isMenuOpen())
-            .coverChildren()
-            .background()
-            .relativeToScreen()
-            .child(
-                new ListWidget<>().coverChildrenHeight()
-                    .width(100)
-                    .child(new ButtonWidget<>().onMousePressed(_ -> {
-                        canvas.addNote();
-                        return true;
-                    })
-                        .fullWidth()
-                        .background(
-                            new Rectangle().color(PlannhColors.CONTEXT_BG.getColor()),
-                            new Rectangle().hollow()
-                                .color(PlannhColors.CONTEXT_BORDER.getColor()))
-                        .overlay(
-                            IKey.str("Add Note")
-                                .color(Color.WHITE.main)))
-                    .child(new ButtonWidget<>().onMousePressed(_ -> {
-                        canvas.addGroup();
-                        return true;
-                    })
-                        .fullWidth()
-                        .background(
-                            new Rectangle().color(PlannhColors.CONTEXT_BG.getColor()),
-                            new Rectangle().hollow()
-                                .color(PlannhColors.CONTEXT_BORDER.getColor()))
-                        .overlay(
-                            IKey.str("Add Group")
-                                .color(Color.WHITE.main))));
+        canvas = new CanvasWidget(contextMenu, panel);
 
         // Target-rate editor: one numeric field in a floating menu. numbersDouble gives the MUI2
         // math parser, so "2k" and "1/3" work; committing (enter or clicking away) closes it.
@@ -170,49 +131,84 @@ public class FlowchartScreen extends ModularScreen {
             .child(targetField);
         canvas.setTargetEditorMenu(targetEditor);
 
-        final SlotSet set = PlanAPI.getSlotSet();
+        contextMenu.setEnabledIf(_ -> canvas.isMenuOpen())
+            .coverChildren()
+            .background()
+            .relativeToScreen()
+            .child(
+                new ListWidget<>().coverChildrenHeight()
+                    .width(100)
+                    .child(new ButtonWidget<>().onMousePressed(_ -> {
+                        canvas.addNote(canvas.getCanvasMouseX(), canvas.getCanvasMouseY());
+                        return true;
+                    })
+                        .fullWidth()
+                        .background(
+                            new Rectangle().color(PlannhColors.CONTEXT_BG.getColor()),
+                            new Rectangle().hollow()
+                                .color(PlannhColors.CONTEXT_BORDER.getColor()))
+                        .overlay(
+                            IKey.str("Add Note")
+                                .color(Color.WHITE.main)))
+                    .child(new ButtonWidget<>().onMousePressed(_ -> {
+                        canvas.addGroup(canvas.getCanvasMouseX(), canvas.getCanvasMouseY());
+                        return true;
+                    })
+                        .fullWidth()
+                        .background(
+                            new Rectangle().color(PlannhColors.CONTEXT_BG.getColor()),
+                            new Rectangle().hollow()
+                                .color(PlannhColors.CONTEXT_BORDER.getColor()))
+                        .overlay(
+                            IKey.str("Add Group")
+                                .color(Color.WHITE.main))));
 
         mainColumn.child(
             Flow.row()
                 .mainAxisAlignment(Alignment.MainAxis.SPACE_BETWEEN)
-                // MUI2's default widget height is 18: a 16-tall row makes the coverChildren
-                // button rows overflow the cross axis, and SimpleFlow then logs a padding
-                // warning for each of them on EVERY relayout (the log-spam bug).
-                .height(18)
+                .coverChildrenHeight()
                 .fullWidth()
                 .child(
                     Flow.row()
                         .coverChildren()
                         .childPadding(2)
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            cycleGraphs(canvas, -1);
+                            return true;
+                        })
+                            .overlay(IKey.str("<"))
+                            .addTooltipLine("Previous Graph"))
                         .child(
-                            new ButtonWidget<>().overlay(IKey.str("<"))
-                                .onMousePressed(_ -> {
-                                    shiftSlot(canvas, -1);
-                                    return true;
-                                }))
-                        .child(
-                            // Dynamic: the arrows move the active slot under this label.
-                            IKey.dynamicKey(() -> IKey.str(slotLabel()))
-                                .asWidget()
-                                .color(Color.WHITE.main))
-                        .child(
-                            new ButtonWidget<>().overlay(IKey.str(">"))
-                                .onMousePressed(_ -> {
-                                    shiftSlot(canvas, 1);
-                                    return true;
-                                }))
-                        .child(
-                            new ButtonWidget<>().overlay(IKey.str("+"))
-                                .onMousePressed(_ -> {
-                                    addSlot(canvas);
-                                    return true;
-                                }))
-                        .child(
-                            new ButtonWidget<>().overlay(IKey.str("\u00d7"))
-                                .onMousePressed(_ -> {
-                                    deleteSlot(canvas);
-                                    return true;
-                                })))
+                            new TextFieldWidget().value(
+                                new StringValue.Dynamic(
+                                    () -> Plan.getActiveGraph()
+                                        .getName(),
+                                    val -> Plan.getActiveGraph()
+                                        .setName(val)))
+                                .background()
+                                .hoverBackground())
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            cycleGraphs(canvas, 1);
+                            return true;
+                        })
+                            .overlay(IKey.str(">"))
+                            .addTooltipLine("Next Graph"))
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            addGraph(canvas);
+                            return true;
+                        })
+                            .overlay(
+                                IKey.str("+")
+                                    .color(Color.GREEN.main))
+                            .addTooltipLine("Add Graph"))
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            deleteGraph(canvas);
+                            return true;
+                        })
+                            .overlay(
+                                IKey.str("x")
+                                    .color(Color.RED.main))
+                            .addTooltipLine("Remove Graph")))
                 .child(
                     Flow.row()
                         .coverChildren()
@@ -272,41 +268,63 @@ public class FlowchartScreen extends ModularScreen {
                                 }))
                         .child(
                             new CycleButton<>(SummaryMode.class).overlay(v -> IKey.str(CycleButton.shortName(v)))
-                                .current(set.summaryMode)
+                                .current(
+                                    Plan.getInstance()
+                                        .getSummaryMode())
                                 .onCycle(next -> {
-                                    set.summaryMode = next;
+                                    Plan.getInstance()
+                                        .setSummaryMode(next);
                                     PlanAPI.save();
                                 }))
-                        .child(
-                            new ButtonWidget<>().overlay(IKey.str("G"))
-                                .onMousePressed(_ -> {
-                                    canvas.addGroup();
-                                    return true;
-                                }))
-                        .child(
-                            new ButtonWidget<>().overlay(IKey.str("N"))
-                                .onMousePressed(_ -> {
-                                    canvas.addNote();
-                                    return true;
-                                }))
-                        .child(
-                            new ButtonWidget<>().overlay(IKey.str("Sh"))
-                                .onMousePressed(_ -> {
-                                    PlanAPI.shareGraph(canvas.getGraph());
-                                    return true;
-                                }))
-                        .child(
-                            new ButtonWidget<>().overlay(IKey.str("Cp"))
-                                .onMousePressed(_ -> {
-                                    copyGraph(canvas);
-                                    return true;
-                                }))
-                        .child(
-                            new ButtonWidget<>().overlay(IKey.str("Im"))
-                                .onMousePressed(_ -> {
-                                    importGraph(canvas);
-                                    return true;
-                                }))))
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            canvas.addGroup(canvas.getCanvasScreenCenterX(), canvas.getCanvasScreenCenterY());
+                            return true;
+                        })
+                            .overlay(IKey.str("G"))
+                            .addTooltipLine("Add Group"))
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            canvas.addNote(canvas.getCanvasScreenCenterX(), canvas.getCanvasScreenCenterY());
+                            return true;
+                        })
+                            .overlay(IKey.str("N"))
+                            .addTooltipLine("Add Note"))
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            PlanAPI.shareGraph(canvas.getGraph());
+                            return true;
+                        })
+                            .overlay(
+                                IKey.str("Sh")
+                                    .color(Color.GREEN_ACCENT.main))
+                            .addTooltipLine("Share Graph"))
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            PlanAPI.copyToClipboard(canvas.getGraph());
+                            Minecraft.getMinecraft().thePlayer.addChatMessage(
+                                new ChatComponentText(
+                                    "[" + PlanNH.MODID
+                                        + "] "
+                                        + StatCollector.translateToLocal("plannh.share.copy_to_clipboard")));
+                            return true;
+                        })
+                            .overlay(
+                                IKey.str("Cp")
+                                    .color(Color.BLUE_ACCENT.main))
+                            .addTooltipLine("Copy Graph"))
+                        .child(new ButtonWidget<>().onMousePressed(_ -> {
+                            final Graph graph = PlanAPI.importFromClipboard();
+                            if (graph == null) return true;
+                            PlanAPI.importGraph(graph);
+                            canvas.setGraph(graph);
+                            Minecraft.getMinecraft().thePlayer.addChatMessage(
+                                new ChatComponentText(
+                                    "[" + PlanNH.MODID
+                                        + "] "
+                                        + StatCollector.translateToLocal("plannh.share.copy_from_clipboard")));
+                            return true;
+                        })
+                            .overlay(
+                                IKey.str("Im")
+                                    .color(Color.YELLOW_ACCENT.main))
+                            .addTooltipLine("Import Graph"))))
             .child(canvas);
 
         panel.child(mainColumn);
@@ -314,7 +332,7 @@ public class FlowchartScreen extends ModularScreen {
         panel.child(contextMenu);
         panel.child(targetEditor);
 
-        return new FlowchartScreen(panel, graph, canvas);
+        return new FlowchartScreen(panel);
     }
 
     @Override
@@ -363,57 +381,39 @@ public class FlowchartScreen extends ModularScreen {
         GL11.glPopAttrib();
     }
 
-    // ── Slot bar helpers ──
-
-    /** "Slot (4/8)": which chart is on screen, and how many there are to page through. */
-    private static String slotLabel() {
-        final SlotSet set = PlanAPI.getSlotSet();
-        final int count = Math.max(1, set.slots.size());
-        return "Slot (" + Math.min(count, set.activeSlot + 1) + "/" + count + ")";
+    private static void refreshGraph(CanvasWidget canvas) {
+        canvas.setGraph(Plan.getActiveGraph());
     }
 
-    private static void shiftSlot(final CanvasWidget canvas, final int dir) {
-        final SlotSet set = PlanAPI.getSlotSet();
-        if (set.slots.size() <= 1) return;
-        set.activeSlot = (set.activeSlot + dir + set.slots.size()) % set.slots.size();
-        canvas.setGraph(set.getActiveGraph());
-        PlanAPI.save();
+    private static void cycleGraphs(CanvasWidget canvas, final int dir) {
+        final Plan plan = Plan.getInstance();
+        final int size = plan.getGraphs()
+            .size();
+        if (size <= 1) return;
+        plan.setActiveIndex((plan.getActiveIndex() + dir + size) % size);
+        refreshGraph(canvas);
     }
 
-    private static void addSlot(final CanvasWidget canvas) {
-        final SlotSet set = PlanAPI.getSlotSet();
-        final int n = set.slots.size() + 1;
-        final SlotSet.Slot slot = new SlotSet.Slot("Slot " + n, new Graph());
-        set.slots.add(slot);
-        set.activeSlot = set.slots.size() - 1;
-        canvas.setGraph(slot.graph);
-        PlanAPI.save();
+    private static void addGraph(CanvasWidget canvas) {
+        final Plan plan = Plan.getInstance();
+        final int size = plan.getGraphs()
+            .size();
+        plan.getGraphs()
+            .add(new Graph("Slot " + (size + 1)));
+        plan.setActiveIndex(size);
+        refreshGraph(canvas);
     }
 
-    private static void deleteSlot(final CanvasWidget canvas) {
-        final SlotSet set = PlanAPI.getSlotSet();
-        if (set.slots.size() <= 1) return;
-        set.slots.remove(set.activeSlot);
-        if (set.activeSlot >= set.slots.size()) set.activeSlot = set.slots.size() - 1;
-        canvas.setGraph(set.getActiveGraph());
-        PlanAPI.save();
-    }
-
-    private static void copyGraph(final CanvasWidget canvas) {
-        PlanAPI.copyToClipboard(canvas.getGraph());
-        Minecraft.getMinecraft().thePlayer.addChatMessage(
-            new ChatComponentText(
-                "[" + PlanNH.MODID + "] " + StatCollector.translateToLocal("plannh.share.copy_to_clipboard")));
-    }
-
-    private static void importGraph(final CanvasWidget canvas) {
-        final Graph g = PlanAPI.importFromClipboard();
-        if (g == null) return;
-        PlanAPI.importGraph(g);
-        canvas.setGraph(g);
-        Minecraft.getMinecraft().thePlayer.addChatMessage(
-            new ChatComponentText(
-                "[" + PlanNH.MODID + "] " + StatCollector.translateToLocal("plannh.share.copy_from_clipboard")));
+    private static void deleteGraph(CanvasWidget canvas) {
+        final Plan plan = Plan.getInstance();
+        final int size = plan.getGraphs()
+            .size();
+        if (size <= 1) return;
+        final int active = plan.getActiveIndex();
+        plan.getGraphs()
+            .remove(active);
+        if (active >= size - 1) plan.setActiveIndex(size - 2);
+        refreshGraph(canvas);
     }
 
     private static class SummaryWidget extends Widget<SummaryWidget> implements Interactable {
@@ -458,7 +458,8 @@ public class FlowchartScreen extends ModularScreen {
         }
 
         private SummaryMode summaryMode() {
-            return PlanAPI.getSlotSet().summaryMode;
+            return Plan.getInstance()
+                .getSummaryMode();
         }
 
         private float summaryCycleSecs(final BalanceResult br) {
@@ -467,10 +468,10 @@ public class FlowchartScreen extends ModularScreen {
 
         SummaryWidget(final CanvasWidget canvas) {
             this.canvas = canvas;
-            final var set = PlanAPI.getSlotSet();
-            this.floatX = set.summaryX;
-            this.floatY = set.summaryY;
-            this.collapsed = set.summaryCollapsed;
+            final Plan plan = Plan.getInstance();
+            this.floatX = plan.getSummaryX();
+            this.floatY = plan.getSummaryY();
+            this.collapsed = plan.isSummaryCollapsed();
             pos(floatX, floatY);
             size(WIDTH, 200);
         }
@@ -528,9 +529,7 @@ public class FlowchartScreen extends ModularScreen {
 
         /** A null section is one that does not fold, and an unfoldable section is always open. */
         private boolean sectionOpen(@Nullable final SummarySection section) {
-            return section == null || !PlanAPI.getSlotSet()
-                .getActiveSummaryFolds()
-                .contains(section);
+            return section == null || !graph().collapsedSummarySections.contains(section);
         }
 
         /** Header plus, when the section is open, one line per body row. */
@@ -944,7 +943,8 @@ public class FlowchartScreen extends ModularScreen {
 
             if (my < TITLE_H && mx >= WIDTH - COLLAPSE_W) {
                 collapsed = !collapsed;
-                PlanAPI.getSlotSet().summaryCollapsed = collapsed;
+                Plan.getInstance()
+                    .setSummaryCollapsed(collapsed);
                 PlanAPI.save();
                 final Graph g = graph();
                 final BalanceResult br = g.balance();
@@ -957,8 +957,7 @@ public class FlowchartScreen extends ModularScreen {
 
             for (final var header : headerRows.entrySet()) {
                 if (my < header.getValue()[0] || my >= header.getValue()[1]) continue;
-                final var folded = PlanAPI.getSlotSet()
-                    .getActiveSummaryFolds();
+                final var folded = graph().collapsedSummarySections;
                 if (!folded.add(header.getKey())) folded.remove(header.getKey());
                 PlanAPI.save();
                 size(WIDTH, computeHeight(displayedSummary(g0.summary(), br0), br0));
@@ -994,9 +993,9 @@ public class FlowchartScreen extends ModularScreen {
         @Override
         public boolean onMouseRelease(final int mouseButton) {
             if (dragging) {
-                final var set = PlanAPI.getSlotSet();
-                set.summaryX = floatX;
-                set.summaryY = floatY;
+                final var set = Plan.getInstance();
+                set.setSummaryX(floatX);
+                set.setSummaryY(floatY);
                 PlanAPI.save();
             }
             dragging = false;

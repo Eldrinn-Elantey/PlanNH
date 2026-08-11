@@ -19,8 +19,8 @@ import net.minecraft.nbt.NBTTagString;
 import net.minecraft.util.StatCollector;
 
 import com.sbancuz.plannh.data.flowchart.Graph;
+import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Serializer;
-import com.sbancuz.plannh.data.flowchart.SlotSet;
 import com.sbancuz.plannh.data.flowchart.UndoHistory;
 
 import codechicken.nei.NEIClientConfig;
@@ -31,41 +31,21 @@ public final class PlanAPI {
     /** NBT key used to store the encoded graph in the share ItemStack. */
     public static final String PLANNH_DATA_KEY = "plannh_data";
 
-    @Nullable
-    private static SlotSet slotSet = null;
-
-    @Nonnull
-    public static SlotSet getSlotSet() {
-        if (slotSet == null) {
-            slotSet = loadSlotSet();
-        }
-        return slotSet;
-    }
-
-    public static void unloadSlotSet() {
-        save();
-        slotSet = null;
-    }
-
     @Nonnull
     public static Graph getActiveGraph() {
-        return getSlotSet().getActiveGraph();
+        return Plan.getActiveGraph();
     }
 
     public static UndoHistory undoHistory() {
-        return getSlotSet().getActiveUndoHistory();
+        return getActiveGraph().undoHistory;
     }
 
     /** Runs {@code edit} as one undo step; no-op edits leave no trace. */
     public static void recordEdit(final Graph graph, final Runnable edit) {
-        final UndoHistory history = undoHistory();
+        final UndoHistory history = graph.undoHistory;
         final String before = history.beginEdit(graph);
         edit.run();
         history.commitEdit(before, graph);
-    }
-
-    public static void save() {
-        saveSlotSet(getSlotSet());
     }
 
     /**
@@ -139,14 +119,17 @@ public final class PlanAPI {
     }
 
     /**
-     * Wraps a deserialised graph in a new "Imported" slot, adds it to the
-     * active slot set, switches to it, and persists. Does not open any GUI.
+     * Wraps a deserialised graph in a new "Imported" slot, switches to it,
+     * and persists. Does not open any GUI.
      */
     public static void importGraph(@Nonnull final Graph graph) {
-        final SlotSet set = getSlotSet();
-        final SlotSet.Slot slot = new SlotSet.Slot(StatCollector.translateToLocal("plannh.share.slot_imported"), graph);
-        set.slots.add(slot);
-        set.activeSlot = set.slots.size() - 1;
+        final Plan plan = Plan.getInstance();
+        graph.setName(StatCollector.translateToLocal("plannh.share.slot_imported"));
+        plan.getGraphs()
+            .add(graph);
+        plan.setActiveIndex(
+            plan.getGraphs()
+                .size() - 1);
         save();
     }
 
@@ -169,35 +152,16 @@ public final class PlanAPI {
         return stack;
     }
 
-    private static SlotSet loadSlotSet() {
-        try {
-            final File saveFile = getSaveFile();
-            if (saveFile.isFile()) {
-                final String data = Files.readString(saveFile.toPath(), StandardCharsets.UTF_8);
-                if (data.startsWith("{")) {
-                    return Serializer.decodeSlotSet(data);
-                }
-                final Graph graph = Serializer.decode(data);
-                final SlotSet set = new SlotSet();
-                set.slots.add(new SlotSet.Slot("Slot 1", graph));
-                return set;
-            }
-        } catch (final Exception ignored) {}
-        final SlotSet set = new SlotSet();
-        set.slots.add(new SlotSet.Slot("Slot 1", new Graph()));
-        return set;
-    }
-
-    private static void saveSlotSet(final SlotSet set) {
+    public static void save() {
         try {
             final File saveFile = getSaveFile();
             saveFile.getParentFile()
                 .mkdirs();
-            Files.writeString(saveFile.toPath(), Serializer.encode(set), StandardCharsets.UTF_8);
+            Files.writeString(saveFile.toPath(), Serializer.encodePlan(Plan.getInstance()), StandardCharsets.UTF_8);
         } catch (final Exception ignored) {}
     }
 
-    private static File getSaveFile() {
+    public static File getSaveFile() {
         final Minecraft mc = Minecraft.getMinecraft();
         final String worldName = NEIClientConfig.getWorldPath();
         if (worldName != null && !worldName.isEmpty()) {

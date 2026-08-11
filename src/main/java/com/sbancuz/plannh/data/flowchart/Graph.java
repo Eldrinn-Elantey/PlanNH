@@ -1,11 +1,13 @@
 package com.sbancuz.plannh.data.flowchart;
 
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 
+import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
@@ -31,6 +33,10 @@ public class Graph {
 
     @Getter
     @Setter
+    private String name;
+
+    @Getter
+    @Setter
     private float zoom = 1f;
     @Getter
     @Setter
@@ -46,6 +52,16 @@ public class Graph {
     private BalanceMode balanceMode = BalanceMode.AUTO;
     @Getter
     private boolean opsMode;
+
+    /**
+     * Per-graph undo/redo stack, transient because snapshots are content-encoded and never stored.
+     */
+    public final transient UndoHistory undoHistory = new UndoHistory();
+
+    /**
+     * Which summary sections the user has folded away in this graph's panel.
+     */
+    public transient EnumSet<SummarySection> collapsedSummarySections = defaultSummaryFolds();
 
     /**
      * Which of the equally-workable answers the user picked, or null for the solver's own. Applied
@@ -65,6 +81,18 @@ public class Graph {
     private BalanceView.Choices choicesView = null;
 
     private boolean dirty = true;
+
+    public Graph() {
+        this.name = "";
+    }
+
+    public Graph(final String name) {
+        this.name = name;
+    }
+
+    public static EnumSet<SummarySection> defaultSummaryFolds() {
+        return EnumSet.of(SummarySection.MACHINE_COUNTS, SummarySection.STATISTICS, SummarySection.HELP);
+    }
 
     public void markDirty() {
         dirty = true;

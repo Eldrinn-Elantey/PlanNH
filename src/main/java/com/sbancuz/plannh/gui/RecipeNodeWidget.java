@@ -279,8 +279,8 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         // Widget-local mouse while hovered; parked far away otherwise so NEI's stack hover box
         // only shows on the node actually under the mouse.
         if (getContext().isHovered(this)) {
-            hoverMx = canvas.getMouseCanvasX() - Math.round(node.x);
-            hoverMy = canvas.getMouseCanvasY() - Math.round(node.y);
+            hoverMx = canvas.getCanvasMouseX() - Math.round(node.x);
+            hoverMy = canvas.getCanvasMouseY() - Math.round(node.y);
         } else {
             hoverMx = -10000;
             hoverMy = -10000;
@@ -364,7 +364,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
 
             final Balancer.NodeBalance simpleNb = getNodeBalance();
             final double simpleOps = simpleNb != null ? simpleNb.operations() : 1;
-            final int simpleDurPerOp = simpleNb != null ? simpleNb.durationPerOp() : node.durationTicks;
+            final int simpleDurPerOp = simpleNb != null ? simpleNb.durationPerOp() : node.getRecipeDuration();
             final StringBuilder simpleTiming = new StringBuilder();
             if (simpleOps > 0) {
                 simpleTiming.append("\u00d7")
@@ -480,10 +480,10 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         final Balancer.NodeBalance nb = getNodeBalance();
         final float sec = nb != null && nb.totalDurationTicks() > 0
             ? (float) nb.totalDurationTicks() / GuiHelper.TICKS_PER_SECOND
-            : node.durationTicks > 0 ? (float) node.durationTicks / GuiHelper.TICKS_PER_SECOND : 1f;
+            : node.getRecipeDuration() > 0 ? (float) node.getRecipeDuration() / GuiHelper.TICKS_PER_SECOND : 1f;
         final double ops = nb != null ? nb.operations() : 1;
 
-        final int durPerOp = nb != null ? nb.durationPerOp() : node.durationTicks;
+        final int durPerOp = nb != null ? nb.durationPerOp() : node.getRecipeDuration();
         final StringBuilder opsLine = new StringBuilder();
         // No balance (unpinned Auto): show the recipe duration only - no count, and below, no
         // throughput rows. An unpinned chart is wiring, not a solved plan; per-machine rates
@@ -914,8 +914,8 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
     @Nullable
     private IngredientHit ingredientUnderMouse() {
         // World-space widget-local mouse; independent of whatever viewport state NEI calls us in.
-        final int mx = canvas.getMouseCanvasX() - Math.round(node.x);
-        final int my = canvas.getMouseCanvasY() - Math.round(node.y);
+        final int mx = canvas.getCanvasMouseX() - Math.round(node.x);
+        final int my = canvas.getCanvasMouseY() - Math.round(node.y);
 
         if (neiWidget != null && handlerRef != null) {
             final PositionedStack gridStack = neiWidget.getPositionedStackMouseOver(mx, my);

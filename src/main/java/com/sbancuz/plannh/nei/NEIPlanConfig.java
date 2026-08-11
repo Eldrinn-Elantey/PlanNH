@@ -15,6 +15,7 @@ import codechicken.nei.api.API;
 import codechicken.nei.api.IConfigureNEI;
 import codechicken.nei.config.OptionCycled;
 import codechicken.nei.config.OptionIntegerField;
+import codechicken.nei.config.OptionTextField;
 import codechicken.nei.recipe.GuiOverlayButton;
 import codechicken.nei.recipe.GuiRecipe;
 import codechicken.nei.recipe.GuiRecipeButton;
@@ -60,6 +61,26 @@ public class NEIPlanConfig implements IConfigureNEI {
         public static int defVal = Keyboard.KEY_Y + NEIClientUtils.CTRL_HASH;
     }
 
+    public static class ConfigBlurStrength {
+
+        public static String KEY = "plannh.blur_strength";
+        public static int min = 0;
+        public static int max = 255;
+        public static int defVal = 16;
+    }
+
+    public static class ConfigShowGrid {
+
+        public static String KEY = "plannh.show_grid";
+        public static int OFF = 0;
+        public static int ON = 1;
+    }
+
+    public static class ConfigBackgroundColor {
+
+        public static String KEY = "plannh.background_color";
+    }
+
     private static final PlanOverlayHandler HANDLER = new PlanOverlayHandler();
 
     @Override
@@ -67,7 +88,6 @@ public class NEIPlanConfig implements IConfigureNEI {
         API.registerNEIGuiHandler(new FlowchartGuiHandler());
         API.addLayoutStyle(0, new FlowchartLayoutStyle());
         MinecraftForge.EVENT_BUS.register(this);
-        API.addOption(new OptionIntegerField(ConfigItemColumns.KEY, ConfigItemColumns.min, ConfigItemColumns.max));
         API.addOption(new OptionCycled(ConfigBurnableOverride.KEY, 2) {
 
             public boolean onClick(int button) {
@@ -82,6 +102,11 @@ public class NEIPlanConfig implements IConfigureNEI {
         API.addHashBind(ConfigUndoKey.KEY, ConfigUndoKey.defVal);
         API.addHashBind(ConfigRedoKey.KEY, ConfigRedoKey.defVal);
         API.addHashBind(ConfigRedoAltKey.KEY, ConfigRedoAltKey.defVal);
+
+        API.addOption(new OptionIntegerField(ConfigItemColumns.KEY, ConfigItemColumns.min, ConfigItemColumns.max));
+        API.addOption(new OptionIntegerField(ConfigBlurStrength.KEY, ConfigBlurStrength.min, ConfigBlurStrength.max));
+        API.addOption(new OptionCycled(ConfigShowGrid.KEY, 2));
+        API.addOption(new OptionTextField(ConfigBackgroundColor.KEY));
     }
 
     @SubscribeEvent

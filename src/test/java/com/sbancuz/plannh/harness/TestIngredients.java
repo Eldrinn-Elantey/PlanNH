@@ -1,7 +1,7 @@
 package com.sbancuz.plannh.harness;
 
-import com.sbancuz.plannh.data.RecipeResource;
 import com.sbancuz.plannh.data.flowchart.Port;
+import com.sbancuz.plannh.data.properties.ResourceProperty;
 
 /**
  * A Minecraft-free ingredient type for headless tests. Corpus charts identify ingredients by
@@ -10,7 +10,7 @@ import com.sbancuz.plannh.data.flowchart.Port;
  */
 public final class TestIngredients {
 
-    /** Mutable holder so {@link RecipeResource#setAmount} works like it does for ItemStack. */
+    /** Mutable holder so {@link ResourceProperty#setAmount} works like it does for ItemStack. */
     public static final class TestIngredient {
 
         public final String name;
@@ -27,7 +27,7 @@ public final class TestIngredients {
         }
     }
 
-    public static final RecipeResource<TestIngredient> TEST = RecipeResource
+    public static final ResourceProperty<TestIngredient> TEST = ResourceProperty
         .builder("test_ingredient", new TestIngredient("", 0))
         .amountExtractor(i -> i.amount)
         .amountUpdater((i, amount) -> i.amount = amount)

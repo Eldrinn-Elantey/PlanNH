@@ -6,8 +6,8 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
-import com.sbancuz.plannh.data.RecipeProperty;
 import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternatives;
+import com.sbancuz.plannh.data.properties.RecipeProperty;
 
 /**
  * A solved balance plus the answers it could have had, or the NONE/stalled fallback with just

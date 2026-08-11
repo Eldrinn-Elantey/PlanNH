@@ -5,7 +5,7 @@ import javax.annotation.Nullable;
 import net.minecraft.item.ItemStack;
 
 import com.cleanroommc.modularui.utils.Color;
-import com.sbancuz.plannh.data.RecipeResource;
+import com.sbancuz.plannh.data.properties.ResourceProperty;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -14,11 +14,11 @@ import lombok.Setter;
 @Getter
 public class Port<T> {
 
-    private final RecipeResource<T> type;
+    private final ResourceProperty<T> type;
     private final T value;
     private float chance;
 
-    public Port(final RecipeResource<T> type, final T value, final float chance) {
+    public Port(final ResourceProperty<T> type, final T value, final float chance) {
         this.type = type;
         this.value = value;
         this.chance = chance;
@@ -58,7 +58,7 @@ public class Port<T> {
     @SuppressWarnings("unchecked")
     public boolean canConnect(final Port<?> other) {
         if (!type.equals(other.type)) return false;
-        return ((RecipeResource<Object>) type).canConnect(value, other.value);
+        return ((ResourceProperty<Object>) type).canConnect(value, other.value);
     }
 
     public void merge(final Port<?> other) {
