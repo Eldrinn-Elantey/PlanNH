@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -25,8 +26,11 @@ import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.SettingDef;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
+import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
+import com.sbancuz.plannh.data.flowchart.balancer.PortRef;
 
 import codechicken.nei.recipe.Recipe;
 
@@ -101,6 +105,7 @@ public final class Serializer {
             final JsonObject slotObj = new JsonObject();
             slotObj.addProperty("name", slot.name);
             slotObj.addProperty("data", encode(slot.graph));
+            slotObj.add("sectionFolds", foldsToJson(slot.collapsedSummarySections));
             arr.add(slotObj);
         }
         root.add("slots", arr);
@@ -136,19 +141,57 @@ public final class Serializer {
                 .getAsString();
             // One unreadable chart costs that chart, not the save; the empty graph keeps slot
             // numbering in place.
+            SlotSet.Slot slot;
             try {
-                set.slots.add(
-                    new SlotSet.Slot(
-                        name,
-                        decode(
-                            obj.get("data")
-                                .getAsString())));
+                slot = new SlotSet.Slot(
+                    name,
+                    decode(
+                        obj.get("data")
+                            .getAsString()));
             } catch (final RuntimeException e) {
                 PlanNH.LOG.error("Slot '{}' could not be read and was left empty", name, e);
-                set.slots.add(new SlotSet.Slot(name, new Graph()));
+                slot = new SlotSet.Slot(name, new Graph());
             }
+            if (obj.has("sectionFolds")) {
+                foldsFromJson(obj.getAsJsonObject("sectionFolds"), slot.collapsedSummarySections);
+            }
+            set.slots.add(slot);
         }
         return set;
+    }
+
+    /**
+     * Every section, not just the folded ones: a section this save has never heard of has to be
+     * distinguishable from one the user deliberately left open, or adding a section would silently
+     * unfold it for everyone who had already saved.
+     */
+    private static JsonObject foldsToJson(final Set<SummarySection> folded) {
+        final JsonObject folds = new JsonObject();
+        for (final SummarySection section : SummarySection.values()) {
+            folds.addProperty(section.name(), folded.contains(section));
+        }
+        return folds;
+    }
+
+    /**
+     * Reads section by section over whatever {@code folded} already holds rather than replacing it:
+     * an unmentioned section is one the save predates, and it keeps the fold a fresh chart gives it.
+     */
+    private static void foldsFromJson(final JsonObject folds, final Set<SummarySection> folded) {
+        for (final var fold : folds.entrySet()) {
+            final SummarySection section;
+            try {
+                section = SummarySection.valueOf(fold.getKey());
+            } catch (final IllegalArgumentException ignored) {
+                continue; // a section this build has dropped
+            }
+            if (fold.getValue()
+                .getAsBoolean()) {
+                folded.add(section);
+            } else {
+                folded.remove(section);
+            }
+        }
     }
 
     /**
@@ -209,7 +252,7 @@ public final class Serializer {
         // from scratch on every solve and mean nothing across a save.
         if (graph.getExcessChoice() != null) {
             final JsonArray anchors = new JsonArray();
-            for (final AutoBalancer.PortRef ref : graph.getExcessChoice()
+            for (final PortRef ref : graph.getExcessChoice()
                 .gateAnchors()) {
                 final JsonObject a = new JsonObject();
                 a.addProperty(
@@ -303,11 +346,11 @@ public final class Serializer {
         // key, and a corrupt one costs the user a preference rather than the chart.
         if (root.has("excessChoice")) {
             try {
-                final List<AutoBalancer.PortRef> anchors = new ArrayList<>();
+                final List<PortRef> anchors = new ArrayList<>();
                 for (final JsonElement elem : root.getAsJsonArray("excessChoice")) {
                     final JsonObject a = elem.getAsJsonObject();
                     anchors.add(
-                        new AutoBalancer.PortRef(
+                        new PortRef(
                             UUID.fromString(
                                 a.get("node")
                                     .getAsString()),
@@ -316,7 +359,7 @@ public final class Serializer {
                             a.get("input")
                                 .getAsBoolean()));
                 }
-                if (!anchors.isEmpty()) graph.setExcessChoice(AutoBalancer.ChoiceKey.of(anchors));
+                if (!anchors.isEmpty()) graph.setExcessChoice(ChoiceKey.of(anchors));
             } catch (final RuntimeException ignored) {}
         }
         graph.setZoom(

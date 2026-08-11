@@ -32,7 +32,6 @@ import com.cleanroommc.modularui.widgets.menu.Menu;
 import com.sbancuz.plannh.Config;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.api.PlanAPI;
-import com.sbancuz.plannh.data.flowchart.BalanceView;
 import com.sbancuz.plannh.data.flowchart.Edge;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Group;
@@ -40,6 +39,7 @@ import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.flowchart.Note;
 import com.sbancuz.plannh.data.flowchart.Port;
 import com.sbancuz.plannh.data.flowchart.UndoHistory;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
 import com.sbancuz.plannh.layout.AutoLayout;
 import com.sbancuz.plannh.nei.NodeLookupContext;
 
@@ -483,8 +483,11 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
 
     /** Chip width in world units - the same measurement the drawing and the layout margin use. */
     private static int chipWorldWidth(final BalanceView.Boundary flow) {
-        return CHIP_PAD_X * 2
-            + Math.round(Minecraft.getMinecraft().fontRenderer.getStringWidth(flow.label()) * CHIP_TEXT_SCALE);
+        return CHIP_PAD_X * 2 + Math.round(
+            Minecraft.getMinecraft().fontRenderer.getStringWidth(
+                flow.label()
+                    .render())
+                * CHIP_TEXT_SCALE);
     }
 
     /**
@@ -570,7 +573,11 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
 
         final float zoom = graph.getZoom();
         final float textScale = CHIP_TEXT_SCALE * zoom;
-        final int textW = Math.round(Minecraft.getMinecraft().fontRenderer.getStringWidth(flow.label()) * textScale);
+        final int textW = Math.round(
+            Minecraft.getMinecraft().fontRenderer.getStringWidth(
+                flow.label()
+                    .render())
+                * textScale);
         final int textH = Math.round(Minecraft.getMinecraft().fontRenderer.FONT_HEIGHT * textScale);
         final int chipW = textW + Math.round(CHIP_PAD_X * 2 * zoom);
         final int chipH = Math.round(CHIP_H * zoom);
@@ -605,7 +612,14 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         GuiHelper.drawRectBorder(x, y, chipW, chipH, thickness, leadColor);
         // Centred in the box on both axes, measured rather than nudged: the label is what sizes
         // the chip, so the padding either side is the same number the width was built from.
-        GuiDraw.drawText(flow.label(), x + (chipW - textW) / 2, y + (chipH - textH) / 2, textScale, textColor, false);
+        GuiDraw.drawText(
+            flow.label()
+                .render(),
+            x + (chipW - textW) / 2,
+            y + (chipH - textH) / 2,
+            textScale,
+            textColor,
+            false);
     }
 
     private void drawGrid(final int w, final int h) {

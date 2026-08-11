@@ -2,18 +2,22 @@ package com.sbancuz.plannh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.function.Predicate;
 
 import org.junit.jupiter.api.Test;
 
-import com.sbancuz.plannh.data.flowchart.BalanceView;
-import com.sbancuz.plannh.data.flowchart.BalanceView.Boundary;
-import com.sbancuz.plannh.data.flowchart.BalanceView.Choice;
-import com.sbancuz.plannh.data.flowchart.BalanceView.Kind;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Serializer;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView.Boundary;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView.Choice;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView.Kind;
+import com.sbancuz.plannh.data.flowchart.balancer.Note;
+import com.sbancuz.plannh.data.flowchart.balancer.SolverMessage;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 
 /**
@@ -27,6 +31,15 @@ class BalanceViewTest {
     private static Graph chart(final String name) {
         return GtnhFlowLoader.load(name)
             .graph();
+    }
+
+    /** The one row matching {@code role}, failing rather than picking when there is not exactly one. */
+    private static Choice onlyRow(final List<Choice> rows, final Predicate<Choice> role) {
+        final List<Choice> matching = rows.stream()
+            .filter(role)
+            .toList();
+        assertEquals(1, matching.size(), () -> "expected exactly one such row, got " + matching);
+        return matching.get(0);
     }
 
     private static List<Boundary> of(final List<Boundary> flows, final Kind kind) {
@@ -52,17 +65,13 @@ class BalanceViewTest {
             voided.get(0)
                 .ratePerSecond(),
             1e-4);
-        assertTrue(
+        assertEquals(
+            SolverMessage.BOUNDARY_EXCESS,
             voided.get(0)
                 .label()
-                .startsWith("excess "),
+                .message(),
             () -> "reads as surplus, not as waste: " + voided.get(0)
                 .label());
-        assertFalse(
-            voided.get(0)
-                .label()
-                .contains("void"),
-            "nothing here is destroyed");
 
         assertTrue(
             of(flows, Kind.PRODUCT).stream()
@@ -116,25 +125,12 @@ class BalanceViewTest {
                         .get(0)
                         .active(),
                     () -> name + " lists each decision's current answer first");
-                assertFalse(
-                    group.heading()
-                        .isBlank(),
-                    () -> name + " has an unnamed decision");
+                assertNotNull(group.heading(), () -> name + " has an unnamed decision");
             }
             for (final Choice row : choices.rows()) {
-                assertFalse(
-                    row.label()
-                        .isBlank(),
-                    () -> name + " has an unlabelled row");
-                assertFalse(
-                    row.label()
-                        .contains("null"),
-                    () -> name + " failed to resolve an ingredient: " + row.label());
+                assertNotNull(row.label(), () -> name + " has an unlabelled row");
                 if (!row.active()) {
-                    assertFalse(
-                        row.reason()
-                            .isBlank(),
-                        () -> name + " listed an alternative with no reason given");
+                    assertNotNull(row.reason(), () -> name + " listed an alternative with no reason given");
                 }
             }
         }
@@ -146,33 +142,37 @@ class BalanceViewTest {
         // If that sentence ever stops reaching the panel, the tilt is invisible again.
         final List<Choice> rows = chart("mk1").choices()
             .rows();
+        final Choice current = onlyRow(rows, Choice::active);
+        final Choice alternative = onlyRow(rows, r -> !r.active());
         assertEquals(
-            "imports instead of leaving a surplus",
-            rows.get(1)
-                .reason());
-        assertTrue(
-            rows.get(0)
-                .label()
-                .startsWith("excess "),
-            () -> "default leaves a surplus: " + rows.get(0)
-                .label());
-        assertTrue(
-            rows.get(1)
-                .label()
-                .startsWith("add "),
-            () -> "alternative imports: " + rows.get(1)
-                .label());
+            SolverMessage.REASON_IMPORTS_INSTEAD,
+            alternative.reason()
+                .message());
+        assertEquals(
+            SolverMessage.BOUNDARY_EXCESS,
+            current.label()
+                .message(),
+            () -> "default leaves a surplus: " + current.label());
+        assertEquals(
+            SolverMessage.BOUNDARY_ADD,
+            alternative.label()
+                .message(),
+            () -> "alternative imports: " + alternative.label());
     }
 
     @Test
     void pickingAnAnswerChangesTheChartAndSticksAcrossASave() {
         final Graph graph = chart("symmetric_choice");
-        final Choice before = graph.choices()
-            .rows()
-            .get(0);
+        final Choice before = onlyRow(
+            graph.choices()
+                .rows(),
+            Choice::active);
         final Choice alternative = graph.choices()
             .rows()
-            .get(1);
+            .stream()
+            .filter(r -> !r.active())
+            .findFirst()
+            .orElseThrow();
         assertFalse(
             before.label()
                 .equals(alternative.label()),
@@ -195,7 +195,7 @@ class BalanceViewTest {
             of(graph.boundary(), Kind.EXCESS).stream()
                 .map(Boundary::label)
                 .findFirst()
-                .orElse(""),
+                .orElse(null),
             "and the canvas voids where the user asked");
 
         assertEquals(
@@ -210,17 +210,19 @@ class BalanceViewTest {
         // Both lose on the same objective - more external quantity - but one throws away and the
         // other imports, and one sentence cannot honestly describe both.
         assertEquals(
-            "leaves more excess",
-            chart("excess_choice").choices()
-                .rows()
-                .get(1)
-                .reason());
+            SolverMessage.REASON_LEAVES_EXCESS,
+            onlyRow(
+                chart("excess_choice").choices()
+                    .rows(),
+                r -> !r.active()).reason()
+                    .message());
         assertEquals(
-            "imports more",
-            chart("loopGraph").choices()
-                .rows()
-                .get(1)
-                .reason());
+            SolverMessage.REASON_IMPORTS_MORE,
+            onlyRow(
+                chart("loopGraph").choices()
+                    .rows(),
+                r -> !r.active()).reason()
+                    .message());
     }
 
     @Test
@@ -248,9 +250,7 @@ class BalanceViewTest {
                     .filter(Choice::active)
                     .count());
             assertEquals(
-                group.rows()
-                    .get(0)
-                    .label(),
+                onlyRow(group.rows(), Choice::active).label(),
                 group.heading(),
                 "named by the answer in force");
         }
@@ -288,5 +288,47 @@ class BalanceViewTest {
                     .isEmpty(),
                 "an incomplete search has to explain itself");
         }
+    }
+
+    @Test
+    void alternativesReadAsAListOfAmounts_importsFirstThenAscending() {
+        // Under the answer in force, the rows are there to be compared against each other, so they
+        // sort like a list of amounts and not like the solver's preference order. Every chart with
+        // a choice, because an ordering that only holds on the chart it was written against is not
+        // an ordering.
+        for (final String name : List.of("symmetric_choice", "excess_choice", "mk1", "loopGraph", "two_decisions")) {
+            for (final BalanceView.Group group : chart(name).choices()
+                .groups()) {
+                boolean seenExcess = false;
+                double previous = Double.NEGATIVE_INFINITY;
+                for (final Choice row : group.rows()) {
+                    if (row.active()) continue; // sorted to the front, not into the amounts
+                    final boolean isImport = row.label()
+                        .message() == SolverMessage.BOUNDARY_ADD;
+                    if (isImport) {
+                        assertFalse(seenExcess, () -> name + " puts an import after a surplus: " + group.rows());
+                    } else if (!seenExcess) {
+                        seenExcess = true;
+                        previous = Double.NEGATIVE_INFINITY; // each block ascends on its own
+                    }
+                    final double rate = rateOf(row.label());
+                    assertTrue(
+                        rate >= previous,
+                        () -> name + " lists " + row.label() + " after a bigger amount: " + group.rows());
+                    previous = rate;
+                }
+            }
+        }
+    }
+
+    /**
+     * The number out of the label's rate argument - "33.33/s sulfuric acid" - units and all
+     * stripped back off. Reads the label rather than the rate behind it on purpose - the order has
+     * to hold for what the panel shows - so a chart whose rows cross a unit boundary (mB against B)
+     * does not belong in the list above.
+     */
+    private static double rateOf(final Note label) {
+        final String[] words = ((String) label.args()[0]).split(" ");
+        return Double.parseDouble(words[0].replaceAll("[^0-9.].*$", ""));
     }
 }

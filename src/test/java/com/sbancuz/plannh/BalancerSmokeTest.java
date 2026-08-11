@@ -12,11 +12,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import com.sbancuz.plannh.data.flowchart.AutoBalancer;
-import com.sbancuz.plannh.data.flowchart.Balancer;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
 import com.sbancuz.plannh.data.flowchart.Node;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer;
+import com.sbancuz.plannh.data.flowchart.balancer.SolverMessage;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 import com.sbancuz.plannh.harness.GtnhFlowLoader.LoadedChart;
 
@@ -99,6 +99,31 @@ class BalancerSmokeTest {
     }
 
     /**
+     * OUTPUT solves in count space ({@code ExtentMinStage} builds a MILP over whole machine
+     * counts), so its answer is buildable without a read-out ceil: every machine reads an exact
+     * integer. When the chart is infeasible for OUTPUT the result falls back to the configured
+     * counts, which are integers as well - either way a whole-machine answer.
+     */
+    @ParameterizedTest
+    @MethodSource("corpus")
+    void outputModeSolvesWholeMachineCounts(final String name) {
+        final LoadedChart chart = GtnhFlowLoader.load(name);
+        final BalanceResult result = Balancer.balance(chart.graph(), BalanceMode.OUTPUT, false);
+
+        for (final Node node : chart.machines()) {
+            final double ops = result.nodeBalances()
+                .get(node.id)
+                .operations();
+            assertEquals(
+                ops,
+                Math.rint(ops),
+                1e-6,
+                name + ": " + node.machineName + " must show a whole machine count, got " + ops);
+            assertTrue(ops >= 1, name + ": " + node.machineName + " solved to " + ops + " machines");
+        }
+    }
+
+    /**
      * The gtnh-flow contract at the Balancer level: an unpinned chart in AUTO mode shows NO
      * quantities - zero counts, empty effective rates (so no throughput rows and an empty
      * summary), and a note telling the user how to ask for a balance. mk1's only pin is its
@@ -126,7 +151,7 @@ class BalancerSmokeTest {
         assertTrue(
             result.notes()
                 .stream()
-                .anyMatch(n -> n.contains("pin")),
+                .anyMatch(n -> n.message() == SolverMessage.NO_PIN),
             "the summary must say how to ask for a balance, got: " + result.notes());
     }
 
@@ -144,7 +169,8 @@ class BalancerSmokeTest {
         assertTrue(
             result.notes()
                 .stream()
-                .anyMatch(n -> n.contains(AutoBalancer.MISSING_EDGE)),
+                .anyMatch(
+                    n -> n.message() == SolverMessage.WIRING_IMPORT || n.message() == SolverMessage.WIRING_UNLINKED),
             "the wiring diagnostic must reach the summary, got: " + result.notes());
     }
 

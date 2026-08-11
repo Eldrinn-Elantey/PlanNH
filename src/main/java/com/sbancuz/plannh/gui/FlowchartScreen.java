@@ -3,9 +3,13 @@ package com.sbancuz.plannh.gui;
 import static codechicken.lib.gui.GuiDraw.drawMultilineTip;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.item.ItemStack;
@@ -34,18 +38,22 @@ import com.cleanroommc.modularui.widgets.ListWidget;
 import com.cleanroommc.modularui.widgets.layout.Flow;
 import com.cleanroommc.modularui.widgets.menu.Menu;
 import com.cleanroommc.modularui.widgets.textfield.TextFieldWidget;
+import com.sbancuz.plannh.Config;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.api.PlanAPI;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer;
-import com.sbancuz.plannh.data.flowchart.BalanceView;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
-import com.sbancuz.plannh.data.flowchart.Balancer.NodeBalance;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.flowchart.SlotSet;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
+import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer.NodeBalance;
+import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
+import com.sbancuz.plannh.data.flowchart.balancer.Note;
+import com.sbancuz.plannh.data.flowchart.balancer.Severity;
 import com.sbancuz.plannh.gui.components.CycleButton;
 import com.sbancuz.plannh.nei.NEIPlanConfig;
 
@@ -183,7 +191,8 @@ public class FlowchartScreen extends ModularScreen {
                                     return true;
                                 }))
                         .child(
-                            IKey.str("Slot " + (PlanAPI.getSlotSet().activeSlot + 1))
+                            // Dynamic: the arrows move the active slot under this label.
+                            IKey.dynamicKey(() -> IKey.str(slotLabel()))
                                 .asWidget()
                                 .color(Color.WHITE.main))
                         .child(
@@ -356,6 +365,13 @@ public class FlowchartScreen extends ModularScreen {
 
     // ── Slot bar helpers ──
 
+    /** "Slot (4/8)": which chart is on screen, and how many there are to page through. */
+    private static String slotLabel() {
+        final SlotSet set = PlanAPI.getSlotSet();
+        final int count = Math.max(1, set.slots.size());
+        return "Slot (" + Math.min(count, set.activeSlot + 1) + "/" + count + ")";
+    }
+
     private static void shiftSlot(final CanvasWidget canvas, final int dir) {
         final SlotSet set = PlanAPI.getSlotSet();
         if (set.slots.size() <= 1) return;
@@ -416,17 +432,16 @@ public class FlowchartScreen extends ModularScreen {
         private static final int SECTION_HEADER_TEXT_Y_OFF = 1;
         private static final int ITEM_TEXT_X = 10;
         private static final int SECTION_END_PAD = 4;
+        private static final int SECTION_TOGGLE_X_OFF = 12;
         private static final int SEPARATOR_Y_OFF = 2;
-        private static final int TOTALS_TEXT_X = 6;
-        private static final int TOTALS_LINE_H = 14;
         private static final int MODE_TEXT_X = 6;
         private static final int MODE_LINE_H = 12;
-        private static final int HELP_SEP_Y_OFF = 4;
-        private static final int HELP_SEP_GAP = 10;
         private static final int ZOOM_TEXT_X = 6;
         private static final int ZOOM_LINE_H = 14;
-        private static final int HELP_LINE_H = 10;
         private static final float NOTE_SCALE = 0.8f;
+
+        private static final String[] HELP_LINES = { "[Scroll] zoom", "[LMB drag] move node", "[R/U] open NEI",
+            "[+ in NEI GUI] add recipe" };
 
         private final CanvasWidget canvas;
 
@@ -462,7 +477,30 @@ public class FlowchartScreen extends ModularScreen {
 
         /** Screen Y of each listed choice, filled during draw and read back on click. */
         private final List<int[]> choiceRows = new ArrayList<>();
-        private int choicesHeaderY = -1;
+        /** Screen Y span of each section header, same draw-then-read-back deal as the choices. */
+        private final Map<SummarySection, int[]> headerRows = new EnumMap<>(SummarySection.class);
+
+        /**
+         * Nodes by descending operation count: the list is read for what to build most of, and the
+         * tail is the part nobody scrolls to. Cached against the balance that ordered them - the
+         * panel draws every frame and the counts only move when the chart is re-solved.
+         */
+        private BalanceResult sortedFor;
+        private List<Node> byOperations = List.of();
+
+        private List<Node> nodesByOperations(final BalanceResult br) {
+            if (br == sortedFor) return byOperations;
+            final List<Node> sorted = new ArrayList<>(graph().getNodes());
+            sorted.sort(Comparator.comparingDouble((final Node node) -> {
+                final NodeBalance nb = br.nodeBalances()
+                    .get(node.id);
+                return nb == null ? 0 : nb.operations();
+            })
+                .reversed());
+            sortedFor = br;
+            byOperations = List.copyOf(sorted);
+            return byOperations;
+        }
 
         /**
          * Word-wrapped notes, held against the balance that produced them. Wrapping runs the font
@@ -471,7 +509,7 @@ public class FlowchartScreen extends ModularScreen {
          * object's identity is the same "has it been re-solved" proxy the router uses.
          */
         private BalanceResult wrappedFor;
-        private List<String> wrapped = List.of();
+        private List<MessageLine> wrappedMessages = List.of();
 
         private boolean choicesOffered(final BalanceResult br) {
             return BalanceView.hasChoices(graph());
@@ -488,47 +526,75 @@ public class FlowchartScreen extends ModularScreen {
                 .size() + headings;
         }
 
+        /** A null section is one that does not fold, and an unfoldable section is always open. */
+        private boolean sectionOpen(@Nullable final SummarySection section) {
+            return section == null || !PlanAPI.getSlotSet()
+                .getActiveSummaryFolds()
+                .contains(section);
+        }
+
+        /** Header plus, when the section is open, one line per body row. */
+        private int sectionHeight(@Nullable final SummarySection section, final int bodyLines) {
+            return SECTION_H + (sectionOpen(section) ? bodyLines * LINE_H : 0) + SECTION_END_PAD;
+        }
+
+        /**
+         * Machine-count lines: one per node that ran, plus the ops/cycle totals line. Zero when the
+         * config hides the section, which is what keeps the height and the draw agreeing about it.
+         */
+        private int machineCountLines(final BalanceResult br) {
+            if (Config.hideMachineCountsSection) return 0;
+            int lines = br.totalOperations() > 0 || br.totalDurationTicks() > 0 ? 1 : 0;
+            for (final Node node : graph().getNodes()) {
+                final NodeBalance nb = br.nodeBalances()
+                    .get(node.id);
+                if (nb != null && nb.operations() > 0) lines++;
+            }
+            return lines;
+        }
+
         private int computeHeight(final Summary summary, final BalanceResult br) {
             if (collapsed) return TITLE_H;
-            final Graph g = graph();
             int h = TITLE_H + SECTION_LY_OFFSET;
 
-            if (!summary.outputs()
-                .isEmpty()) {
-                h += SECTION_H + summary.outputs()
-                    .size() * LINE_H + SECTION_END_PAD;
+            if (choicesOffered(br)) {
+                h += sectionHeight(null, choiceLineCount(br));
             }
             if (!summary.inputs()
                 .isEmpty()) {
-                h += SECTION_H + summary.inputs()
-                    .size() * LINE_H + SECTION_END_PAD;
+                h += sectionHeight(
+                    null,
+                    summary.inputs()
+                        .size());
+            }
+            if (!summary.outputs()
+                .isEmpty()) {
+                h += sectionHeight(
+                    null,
+                    summary.outputs()
+                        .size());
+            }
+            final int countLines = machineCountLines(br);
+            if (countLines > 0) {
+                h += sectionHeight(SummarySection.MACHINE_COUNTS, countLines);
             }
             if (!summary.properties()
                 .isEmpty()) {
-                h += SECTION_H + summary.properties()
-                    .size() * LINE_H + SECTION_END_PAD;
+                h += sectionHeight(
+                    SummarySection.STATISTICS,
+                    summary.properties()
+                        .size());
             }
-            if (br.totalOperations() > 0) {
-                h += SECTION_H + g.getNodes()
-                    .size() * LINE_H + SECTION_END_PAD;
+            wrapNotes(br);
+            if (!wrappedMessages.isEmpty()) {
+                h += sectionHeight(SummarySection.MESSAGES, wrappedMessages.size());
             }
-            if (br.totalDurationTicks() > 0) {
-                h += SECTION_H;
-            }
-            if (choicesOffered(br)) {
-                h += SECTION_H + choiceLineCount(br) * LINE_H + SECTION_END_PAD;
-            }
-            if (!br.notes()
-                .isEmpty()) {
-                h += SECTION_H + wrapNotes(br).size() * LINE_H + SECTION_END_PAD;
-            }
-            h += SECTION_LY_OFFSET + TOTALS_LINE_H + 1 + HELP_LINE_H;
-            h += MODE_LINE_H + HELP_LINE_H * 5;
+            h += MODE_LINE_H + ZOOM_LINE_H + sectionHeight(SummarySection.HELP, HELP_LINES.length) + SECTION_END_PAD;
             return h;
         }
 
         /**
-         * Products/inputs whose amount survives display rounding: netting float residue would
+         * Outputs/inputs whose amount survives display rounding: netting float residue would
          * otherwise print as a "0mB/s" line.
          */
         private Summary displayedSummary(final Summary s, final BalanceResult br) {
@@ -554,20 +620,45 @@ public class FlowchartScreen extends ModularScreen {
             return kept;
         }
 
-        /** Solver notes, word-wrapped to the summary width at the item text scale. */
-        private List<String> wrapNotes(final BalanceResult br) {
-            if (br == wrappedFor) return wrapped;
-            final List<String> lines = new ArrayList<>();
+        /** One drawn line of a solver message, coloured by the severity of the note it came from. */
+        private record MessageLine(String text, int color) {}
+
+        /**
+         * Solver messages, word-wrapped to the summary width at the item text scale and coloured
+         * per severity. One section for every severity: the tag on the front is finer than a
+         * section heading can be, and cheaper than a fold per severity.
+         */
+        private void wrapNotes(final BalanceResult br) {
+            if (br == wrappedFor) return;
+            final List<MessageLine> lines = new ArrayList<>();
             final int wrapWidth = (int) ((WIDTH - ITEM_TEXT_X - 4) / NOTE_SCALE);
-            for (final String note : br.notes()) {
+            for (final Note note : br.notes()) {
+                final int color = severityColor(note.severity());
                 for (final Object line : Minecraft.getMinecraft().fontRenderer
-                    .listFormattedStringToWidth("- " + note, wrapWidth)) {
-                    lines.add((String) line);
+                    .listFormattedStringToWidth("- " + note.render(), wrapWidth)) {
+                    lines.add(new MessageLine((String) line, color));
                 }
             }
             wrappedFor = br;
-            wrapped = List.copyOf(lines);
-            return wrapped;
+            wrappedMessages = List.copyOf(lines);
+        }
+
+        private static int severityColor(final Severity severity) {
+            return switch (severity) {
+                case ERROR -> PlannhColors.ACCENT_RED.getColor();
+                case WARN -> PlannhColors.ACCENT_AMBER.getColor();
+                case INFO -> PlannhColors.ACCENT_BLUE.getColor();
+            };
+        }
+
+        /** The loudest thing the solver said: an alarming bar over three asides cries wolf. */
+        private static Severity loudest(final BalanceResult br) {
+            Severity worst = Severity.INFO;
+            for (final Note note : br.notes()) {
+                final Severity severity = note.severity();
+                if (severity.ordinal() < worst.ordinal()) worst = severity;
+            }
+            return worst;
         }
 
         @Override
@@ -586,7 +677,11 @@ public class FlowchartScreen extends ModularScreen {
                 1.0f,
                 PlannhColors.TEXT_MUTED.getColor(),
                 false);
-            if (collapsed) return;
+            headerRows.clear();
+            if (collapsed) {
+                choiceRows.clear();
+                return;
+            }
 
             final Graph g = graph();
             final BalanceResult br = g.balance();
@@ -597,21 +692,14 @@ public class FlowchartScreen extends ModularScreen {
             final boolean isCycle = sMode == SummaryMode.CYCLES;
             int ly = TITLE_H + SECTION_LY_OFFSET;
 
-            ly = drawSection(
-                ly,
-                w,
-                "Products",
-                s.outputs(),
-                PlannhColors.SECTION_PRODUCT.getColor(),
-                PlannhColors.ACCENT_AMBER.getColor(),
-                PlannhColors.ACCENT_AMBER.getColor(),
-                cycleSecs,
-                isCycle);
+            // Chronological reading order: what was decided, what goes in, what comes out, what runs.
+            ly = drawChoices(ly, w, br);
 
             ly = drawSection(
                 ly,
                 w,
-                "External Inputs",
+                null,
+                "Inputs",
                 s.inputs(),
                 PlannhColors.SECTION_INPUT.getColor(),
                 PlannhColors.ACCENT_GREEN2.getColor(),
@@ -619,117 +707,60 @@ public class FlowchartScreen extends ModularScreen {
                 cycleSecs,
                 isCycle);
 
-            if (!s.properties()
-                .isEmpty()) {
+            ly = drawSection(
+                ly,
+                w,
+                null,
+                "Outputs",
+                s.outputs(),
+                PlannhColors.SECTION_PRODUCT.getColor(),
+                PlannhColors.ACCENT_AMBER.getColor(),
+                PlannhColors.ACCENT_AMBER.getColor(),
+                cycleSecs,
+                isCycle);
 
-                ly = drawSection(
+            ly = drawMachineCounts(ly, w, br, isCycle);
+
+            ly = drawSection(
+                ly,
+                w,
+                SummarySection.STATISTICS,
+                "Statistics",
+                s.properties(),
+                PlannhColors.SECTION_OPS.getColor(),
+                PlannhColors.ACCENT_BLUE.getColor(),
+                PlannhColors.ACCENT_BLUE.getColor(),
+                cycleSecs,
+                isCycle);
+
+            wrapNotes(br);
+            if (!wrappedMessages.isEmpty()) {
+                final Severity worst = loudest(br);
+                ly = drawSectionHeader(
                     ly,
                     w,
-                    "Properties",
-                    s.properties(),
-                    PlannhColors.SECTION_OPS.getColor(),
-                    PlannhColors.SECTION_OPS.getColor(),
-                    PlannhColors.ACCENT_BLUE.getColor(),
-                    cycleSecs,
-                    isCycle);
-            }
-
-            if (br.totalOperations() > 0) {
-                GuiDraw.drawRect(
-                    SECTION_HEADER_X,
-                    ly,
-                    w - SECTION_HEADER_X * 2,
-                    SECTION_H,
-                    PlannhColors.SECTION_OPS.getColor());
-                GuiDraw.drawText(
-                    "Operations",
-                    SECTION_HEADER_TEXT_X,
-                    ly + SECTION_HEADER_TEXT_Y_OFF,
-                    1.0f,
-                    PlannhColors.ACCENT_BLUE.getColor(),
-                    false);
-                ly += SECTION_H;
-                for (final Node node : g.getNodes()) {
-                    final NodeBalance nb = br.nodeBalances()
-                        .get(node.id);
-                    if (nb == null || nb.operations() <= 0) continue;
-                    GuiDraw.drawText(
-                        "\u00d7" + GuiHelper.formatCount(nb.operations()) + "  " + node.machineName,
-                        ITEM_TEXT_X,
-                        ly,
-                        0.8f,
-                        PlannhColors.TEXT_LIGHT.getColor(),
-                        false);
-                    ly += LINE_H;
+                    SummarySection.MESSAGES,
+                    "Solver Messages (" + br.notes()
+                        .size() + ")",
+                    worst == Severity.INFO ? PlannhColors.SECTION_OPS.getColor() : PlannhColors.SECTION_WARN.getColor(),
+                    severityColor(worst));
+                if (sectionOpen(SummarySection.MESSAGES)) {
+                    for (final MessageLine line : wrappedMessages) {
+                        GuiDraw.drawText(line.text(), ITEM_TEXT_X, ly, NOTE_SCALE, line.color(), false);
+                        ly += LINE_H;
+                    }
                 }
                 ly += SECTION_END_PAD;
             }
 
-            if (br.totalOperations() > 0 || br.totalDurationTicks() > 0) {
-                final StringBuilder totals = new StringBuilder();
-                if (br.totalOperations() > 0) totals.append("Ops: ")
-                    .append(GuiHelper.formatCount(br.totalOperations()));
-                if (br.totalDurationTicks() > 0) {
-                    final float sec = (float) br.totalDurationTicks() / GuiHelper.TICKS_PER_SECOND;
-                    if (!totals.isEmpty()) totals.append("  ");
-                    if (isCycle) {
-                        totals.append("Time: ")
-                            .append(br.totalDurationTicks())
-                            .append("t");
-                        if (sec > 0) totals.append(" (")
-                            .append(String.format("%.1f", sec))
-                            .append("s/cycle)");
-                    } else {
-                        totals.append("Cycle: ")
-                            .append(String.format("%.1f", sec))
-                            .append("s");
-                    }
-                }
-                GuiDraw.drawRect(0, ly - SEPARATOR_Y_OFF, w, 1, PlannhColors.SEPARATOR_LIGHT.getColor());
-                GuiDraw
-                    .drawText(totals.toString(), TOTALS_TEXT_X, ly, 0.9f, PlannhColors.ACCENT_BLUE.getColor(), false);
-                ly += TOTALS_LINE_H;
-            }
-
+            // Below the fold: what the chart is, rather than what is in it.
             final BalanceMode mode = g.getBalanceMode();
             final String modeStr = String.format(
                 StatCollector.translateToLocal("plannh.gui.balancer_mode"),
                 String.format(mode.displayName(), g.isOpsMode() ? ", ops" : ""));
+            GuiDraw.drawRect(0, ly - SEPARATOR_Y_OFF, w, 1, PlannhColors.SEPARATOR_LIGHT.getColor());
             GuiDraw.drawText(modeStr, MODE_TEXT_X, ly, 0.9f, PlannhColors.ACCENT_BLUE.getColor(), false);
             ly += MODE_LINE_H;
-
-            ly = drawChoices(ly, w, br);
-
-            if (!br.notes()
-                .isEmpty()) {
-                GuiDraw.drawRect(
-                    SECTION_HEADER_X,
-                    ly,
-                    w - SECTION_HEADER_X * 2,
-                    SECTION_H,
-                    PlannhColors.SECTION_OPS.getColor());
-                GuiDraw.drawText(
-                    "Notes",
-                    SECTION_HEADER_TEXT_X,
-                    ly + SECTION_HEADER_TEXT_Y_OFF,
-                    1.0f,
-                    PlannhColors.ACCENT_AMBER.getColor(),
-                    false);
-                ly += SECTION_H;
-                for (final String line : wrapNotes(br)) {
-                    GuiDraw.drawText(line, ITEM_TEXT_X, ly, NOTE_SCALE, PlannhColors.ACCENT_AMBER.getColor(), false);
-                    ly += LINE_H;
-                }
-                ly += SECTION_END_PAD;
-            }
-
-            GuiDraw.drawRect(
-                SECTION_HEADER_X,
-                ly + HELP_SEP_Y_OFF,
-                w - SECTION_HEADER_X * 2,
-                1,
-                PlannhColors.SEPARATOR_DIM.getColor());
-            ly += HELP_SEP_GAP;
             GuiDraw.drawText(
                 "Zoom: " + Math.round(
                     canvas.getGraph()
@@ -741,15 +772,20 @@ public class FlowchartScreen extends ModularScreen {
                 PlannhColors.TEXT_MUTED.getColor(),
                 false);
             ly += ZOOM_LINE_H;
-            GuiDraw.drawText("[Scroll] zoom", 6, ly, 0.8f, PlannhColors.TEXT_FAINT.getColor(), false);
-            ly += HELP_LINE_H;
-            GuiDraw.drawText("[MMB] pan", 6, ly, 0.8f, PlannhColors.TEXT_FAINT.getColor(), false);
-            ly += HELP_LINE_H;
-            GuiDraw.drawText("[LMB drag] move node", 6, ly, 0.8f, PlannhColors.TEXT_FAINT.getColor(), false);
-            ly += HELP_LINE_H;
-            GuiDraw.drawText("[Double-click] open NEI", 6, ly, 0.8f, PlannhColors.TEXT_FAINT.getColor(), false);
-            ly += HELP_LINE_H;
-            GuiDraw.drawText("[+ in NEI GUI] add recipe", 6, ly, 0.8f, PlannhColors.TEXT_FAINT.getColor(), false);
+
+            ly = drawSectionHeader(
+                ly,
+                w,
+                SummarySection.HELP,
+                "Help",
+                PlannhColors.SECTION_OPS.getColor(),
+                PlannhColors.TEXT_MUTED.getColor());
+            if (sectionOpen(SummarySection.HELP)) {
+                for (final String line : HELP_LINES) {
+                    GuiDraw.drawText(line, ITEM_TEXT_X, ly, 0.8f, PlannhColors.TEXT_FAINT.getColor(), false);
+                    ly += LINE_H;
+                }
+            }
         }
 
         /**
@@ -764,26 +800,17 @@ public class FlowchartScreen extends ModularScreen {
          */
         private int drawChoices(int ly, final int w, final BalanceResult br) {
             choiceRows.clear();
-            choicesHeaderY = -1;
             if (!choicesOffered(br)) return ly;
 
             final BalanceView.Choices alts = graph().choices();
-            choicesHeaderY = ly;
-            GuiDraw.drawRect(
-                SECTION_HEADER_X,
+            ly = drawSectionHeader(
                 ly,
-                w - SECTION_HEADER_X * 2,
-                SECTION_H,
-                PlannhColors.SECTION_CHOICE.getColor());
-            GuiDraw.drawText(
+                w,
+                null,
                 "Choices (" + alts.rows()
                     .size() + ")",
-                SECTION_HEADER_TEXT_X,
-                ly + SECTION_HEADER_TEXT_Y_OFF,
-                1.0f,
-                PlannhColors.ACCENT_CYAN2.getColor(),
-                false);
-            ly += SECTION_H;
+                PlannhColors.SECTION_CHOICE.getColor(),
+                PlannhColors.ACCENT_CYAN2.getColor());
 
             // A heading per decision only when there is more than one: with a single question the
             // heading would just repeat the row directly under it.
@@ -792,7 +819,8 @@ public class FlowchartScreen extends ModularScreen {
             for (final BalanceView.Group group : alts.groups()) {
                 if (headings) {
                     GuiDraw.drawText(
-                        group.heading() + ":",
+                        group.heading()
+                            .render() + ":",
                         ITEM_TEXT_X,
                         ly,
                         NOTE_SCALE,
@@ -802,7 +830,9 @@ public class FlowchartScreen extends ModularScreen {
                 }
                 for (final BalanceView.Choice row : group.rows()) {
                     GuiDraw.drawText(
-                        (row.active() ? "> " : "  ") + (headings ? "  " : "") + row.label(),
+                        (row.active() ? "> " : "  ") + (headings ? "  " : "")
+                            + row.label()
+                                .render(),
                         ITEM_TEXT_X,
                         ly,
                         NOTE_SCALE,
@@ -815,19 +845,86 @@ public class FlowchartScreen extends ModularScreen {
             return ly + SECTION_END_PAD;
         }
 
-        private int drawSection(int ly, final int w, final String title, final List<Summary.Line<?>> items,
-            final int headerColor, final int titleColor, final int itemColor, final float cycleSecs,
-            final boolean isCycle) {
-            if (items.isEmpty()) return ly;
+        /**
+         * A section heading, clickable when the section folds. A folded section keeps its header,
+         * or there would be nothing left to click to get it back; a null section draws the bar
+         * alone, with no marker and no hit area.
+         */
+        private int drawSectionHeader(final int ly, final int w, @Nullable final SummarySection section,
+            final String title, final int headerColor, final int titleColor) {
             GuiDraw.drawRect(SECTION_HEADER_X, ly, w - SECTION_HEADER_X * 2, SECTION_H, headerColor);
-            GuiDraw.drawText(
-                title + " (" + items.size() + ")",
-                SECTION_HEADER_TEXT_X,
-                ly + SECTION_HEADER_TEXT_Y_OFF,
-                1.0f,
-                titleColor,
-                false);
-            ly += SECTION_H;
+            GuiDraw.drawText(title, SECTION_HEADER_TEXT_X, ly + SECTION_HEADER_TEXT_Y_OFF, 1.0f, titleColor, false);
+            if (section != null) {
+                GuiDraw.drawText(
+                    sectionOpen(section) ? "\u2212" : "+",
+                    w - SECTION_TOGGLE_X_OFF,
+                    ly + SECTION_HEADER_TEXT_Y_OFF,
+                    1.0f,
+                    titleColor,
+                    false);
+                headerRows.put(section, new int[] { ly, ly + SECTION_H });
+            }
+            return ly + SECTION_H;
+        }
+
+        /** Per-node operation counts and the run totals, folded away by default. */
+        private int drawMachineCounts(int ly, final int w, final BalanceResult br, final boolean isCycle) {
+            if (machineCountLines(br) == 0) return ly;
+            ly = drawSectionHeader(
+                ly,
+                w,
+                SummarySection.MACHINE_COUNTS,
+                "Machine Counts",
+                PlannhColors.SECTION_OPS.getColor(),
+                PlannhColors.ACCENT_BLUE.getColor());
+            if (!sectionOpen(SummarySection.MACHINE_COUNTS)) return ly + SECTION_END_PAD;
+
+            for (final Node node : nodesByOperations(br)) {
+                final NodeBalance nb = br.nodeBalances()
+                    .get(node.id);
+                if (nb == null || nb.operations() <= 0) continue;
+                GuiDraw.drawText(
+                    "\u00d7" + GuiHelper.formatCount(nb.operations()) + "  " + node.machineName,
+                    ITEM_TEXT_X,
+                    ly,
+                    0.8f,
+                    PlannhColors.TEXT_LIGHT.getColor(),
+                    false);
+                ly += LINE_H;
+            }
+
+            final StringBuilder totals = new StringBuilder();
+            if (br.totalOperations() > 0) totals.append("Ops: ")
+                .append(GuiHelper.formatCount(br.totalOperations()));
+            if (br.totalDurationTicks() > 0) {
+                final float sec = (float) br.totalDurationTicks() / GuiHelper.TICKS_PER_SECOND;
+                if (!totals.isEmpty()) totals.append("  ");
+                if (isCycle) {
+                    totals.append("Time: ")
+                        .append(br.totalDurationTicks())
+                        .append("t");
+                    if (sec > 0) totals.append(" (")
+                        .append(String.format("%.1f", sec))
+                        .append("s/cycle)");
+                } else {
+                    totals.append("Cycle: ")
+                        .append(String.format("%.1f", sec))
+                        .append("s");
+                }
+            }
+            if (!totals.isEmpty()) {
+                GuiDraw.drawText(totals.toString(), ITEM_TEXT_X, ly, 0.8f, PlannhColors.ACCENT_BLUE.getColor(), false);
+                ly += LINE_H;
+            }
+            return ly + SECTION_END_PAD;
+        }
+
+        private int drawSection(int ly, final int w, @Nullable final SummarySection section, final String title,
+            final List<Summary.Line<?>> items, final int headerColor, final int titleColor, final int itemColor,
+            final float cycleSecs, final boolean isCycle) {
+            if (items.isEmpty()) return ly;
+            ly = drawSectionHeader(ly, w, section, title + " (" + items.size() + ")", headerColor, titleColor);
+            if (!sectionOpen(section)) return ly + SECTION_END_PAD;
             for (final var item : items) {
                 final String text = item.displayAmount(isCycle ? item.amount() : item.amount() / cycleSecs)
                     + (isCycle ? " x " : "/s ")
@@ -857,12 +954,23 @@ public class FlowchartScreen extends ModularScreen {
 
             final Graph g0 = graph();
             final BalanceResult br0 = g0.balance();
+
+            for (final var header : headerRows.entrySet()) {
+                if (my < header.getValue()[0] || my >= header.getValue()[1]) continue;
+                final var folded = PlanAPI.getSlotSet()
+                    .getActiveSummaryFolds();
+                if (!folded.add(header.getKey())) folded.remove(header.getKey());
+                PlanAPI.save();
+                size(WIDTH, computeHeight(displayedSummary(g0.summary(), br0), br0));
+                return Result.SUCCESS;
+            }
+
             if (choicesOffered(br0)) {
                 final List<BalanceView.Choice> options = g0.choices()
                     .rows();
                 for (int i = 0; i < choiceRows.size() && i < options.size(); i++) {
                     if (my < choiceRows.get(i)[0] || my >= choiceRows.get(i)[1]) continue;
-                    final AutoBalancer.ChoiceKey picked = options.get(i)
+                    final ChoiceKey picked = options.get(i)
                         .key();
                     PlanAPI.recordEdit(g0, () -> g0.setExcessChoice(picked));
                     g0.markDirty();
