@@ -5,9 +5,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -19,12 +21,15 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
+import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.SettingDef;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
+import com.sbancuz.plannh.data.flowchart.balancer.PortRef;
 
 import codechicken.nei.recipe.Recipe;
 
@@ -41,7 +46,7 @@ public final class Serializer {
      * Encodes a full graph to a compressed base64 string (gzip + json + base64).
      */
     @Nonnull
-    public static String encodeGraph(final Graph graph) {
+    public static String encode(final Graph graph) {
         try {
             final String json = GSON.toJson(graphToJson(graph));
             final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -60,7 +65,7 @@ public final class Serializer {
      * Decodes a compressed base64 string back to a Graph.
      */
     @Nonnull
-    public static Graph decodeGraph(final String data) {
+    public static Graph decode(final String data) {
         try {
             final byte[] bytes = Base64.getDecoder()
                 .decode(data);
@@ -84,16 +89,22 @@ public final class Serializer {
     // ── Plan serialization ──
 
     /**
-     * Encodes a Plan (with all its graphs) to a JSON string.
+     * Encodes a Plan (with all its graphs) to a JSON string. Graph bodies are stored compressed,
+     * each with its slot name and summary section folds.
      */
     @Nonnull
     public static String encodePlan(final Plan plan) {
         final JsonObject root = GSON.toJsonTree(plan, Plan.class)
             .getAsJsonObject();
 
-        // graphs need to be encoded
         final JsonArray arr = new JsonArray();
-        for (final Graph graph : plan.getGraphs()) arr.add(new JsonPrimitive(encodeGraph(graph)));
+        for (final Graph graph : plan.getGraphs()) {
+            final JsonObject slotObj = new JsonObject();
+            slotObj.addProperty("name", graph.getName());
+            slotObj.addProperty("data", encode(graph));
+            slotObj.add("sectionFolds", foldsToJson(graph.collapsedSummarySections));
+            arr.add(slotObj);
+        }
         root.add("graphs", arr);
 
         return GSON.toJson(root);
@@ -105,13 +116,69 @@ public final class Serializer {
     @Nonnull
     public static Plan decodePlan(final String json) {
         final Plan plan = GSON.fromJson(json, Plan.class);
-        final List<Graph> graphs = plan.getGraphs();
 
         // graphs need to be decoded
-        for (final JsonElement elem : GSON.fromJson(json, JsonObject.class)
-            .getAsJsonArray("graphs")) graphs.add(decodeGraph(elem.getAsString()));
+        final JsonObject root = GSON.fromJson(json, JsonObject.class);
+        if (root.has("graphs")) {
+            for (final JsonElement elem : root.getAsJsonArray("graphs")) {
+                final JsonObject obj = elem.getAsJsonObject();
+                final String name = obj.has("name") ? obj.get("name")
+                    .getAsString() : "";
+                // One unreadable chart costs that chart, not the save; the empty graph keeps slot
+                // numbering in place.
+                Graph graph;
+                try {
+                    graph = decode(
+                        obj.get("data")
+                            .getAsString());
+                } catch (final RuntimeException e) {
+                    PlanNH.LOG.error("Slot '{}' could not be read and was left empty", name, e);
+                    graph = new Graph(name);
+                }
+                graph.setName(name);
+                if (obj.has("sectionFolds")) {
+                    foldsFromJson(obj.getAsJsonObject("sectionFolds"), graph.collapsedSummarySections);
+                }
+                plan.getGraphs()
+                    .add(graph);
+            }
+        }
 
         return plan;
+    }
+
+    /**
+     * Every section, not just the folded ones: a section this save has never heard of has to be
+     * distinguishable from one the user deliberately left open, or adding a section would silently
+     * unfold it for everyone who had already saved.
+     */
+    private static JsonObject foldsToJson(final Set<SummarySection> folded) {
+        final JsonObject folds = new JsonObject();
+        for (final SummarySection section : SummarySection.values()) {
+            folds.addProperty(section.name(), folded.contains(section));
+        }
+        return folds;
+    }
+
+    /**
+     * Reads section by section over whatever {@code folded} already holds rather than replacing it:
+     * an unmentioned section is one the save predates, and it keeps the fold a fresh chart gives it.
+     */
+    private static void foldsFromJson(final JsonObject folds, final Set<SummarySection> folded) {
+        for (final var fold : folds.entrySet()) {
+            final SummarySection section;
+            try {
+                section = SummarySection.valueOf(fold.getKey());
+            } catch (final IllegalArgumentException ignored) {
+                continue; // a section this build has dropped
+            }
+            if (fold.getValue()
+                .getAsBoolean()) {
+                folded.add(section);
+            } else {
+                folded.remove(section);
+            }
+        }
     }
 
     /**
@@ -123,8 +190,7 @@ public final class Serializer {
         sb.append("flowchart LR\n");
 
         // Map UUIDs to short mermaid-safe IDs
-        for (final Node node : graph.getNodes()
-            .values()) {
+        for (final Node node : graph.getNodes()) {
             final String id = mermaidId(node.id);
             final String label = node.machineName.isEmpty() ? "?" : node.machineName;
             sb.append("    ")
@@ -134,8 +200,7 @@ public final class Serializer {
                 .append("\"]\n");
         }
 
-        for (final Edge edge : graph.getEdges()
-            .values()) {
+        for (final Edge edge : graph.getEdges()) {
             final String srcId = mermaidId(edge.sourceNodeId);
             final String dstId = mermaidId(edge.targetNodeId);
             final String label = edgeLabel(graph, edge);
@@ -152,8 +217,7 @@ public final class Serializer {
                 .append("\n");
         }
 
-        for (final Note note : graph.getNotes()
-            .values()) {
+        for (final Note note : graph.getNotes()) {
             sb.append("    %% Note: ");
             for (String s : note.getText()) sb.append(escapeMermaid(s))
                 .append("\n");
@@ -170,21 +234,54 @@ public final class Serializer {
             "balanceMode",
             graph.getBalanceMode()
                 .name());
+        root.addProperty("opsMode", graph.isOpsMode());
+        // The chosen answer travels as the ports it opens, never as gate indices: those are rebuilt
+        // from scratch on every solve and mean nothing across a save.
+        if (graph.getExcessChoice() != null) {
+            final JsonArray anchors = new JsonArray();
+            for (final PortRef ref : graph.getExcessChoice()
+                .gateAnchors()) {
+                final JsonObject a = new JsonObject();
+                a.addProperty(
+                    "node",
+                    ref.nodeId()
+                        .toString());
+                a.addProperty("port", ref.portIndex());
+                a.addProperty("input", ref.input());
+                anchors.add(a);
+            }
+            root.add("excessChoice", anchors);
+        }
         root.addProperty("zoom", graph.getZoom());
         root.addProperty("panX", graph.getPanX());
         root.addProperty("panY", graph.getPanY());
         root.addProperty("name", graph.getName());
 
         final JsonArray nodesArray = new JsonArray();
-        for (final Node node : graph.getNodes()
-            .values()) {
+        for (final Node node : graph.getNodes()) {
             final JsonObject obj = new JsonObject();
             obj.addProperty("id", node.id.toString());
             obj.addProperty("x", node.x);
             obj.addProperty("y", node.y);
             obj.addProperty("machine", node.machineName);
-            obj.add("recipeId", node.recipeId.toJsonObject());
+            // Null-tolerant on both sides: an unresolved recipe must not make the slot
+            // unsaveable, and downstream treats a null recipeId as "handler unavailable".
+            if (node.recipeId != null) {
+                obj.add("recipeId", node.recipeId.toJsonObject());
+            }
             obj.addProperty("handlerRecipeIndex", node.handlerRecipeIndex);
+            obj.addProperty("extractorIndex", node.getExtractorIndex());
+            obj.addProperty("machineCount", node.machineConfig.getMachineCount());
+            if (node.isMachineCountFixed()) {
+                obj.addProperty("machineCountFixed", true);
+            }
+            if (!node.targetOutputRates.isEmpty()) {
+                final JsonObject targets = new JsonObject();
+                for (final Map.Entry<Integer, Double> t : node.targetOutputRates.entrySet()) {
+                    targets.addProperty(String.valueOf(t.getKey()), t.getValue());
+                }
+                obj.add("targets", targets);
+            }
 
             obj.add("inputs", portListToJson(node.inputs));
             obj.add("outputs", portListToJson(node.outputs));
@@ -198,8 +295,7 @@ public final class Serializer {
         root.add("nodes", nodesArray);
 
         final JsonArray edgesArray = new JsonArray();
-        for (final Edge edge : graph.getEdges()
-            .values()) {
+        for (final Edge edge : graph.getEdges()) {
             final JsonObject obj = new JsonObject();
             obj.addProperty("id", edge.id.toString());
             obj.addProperty("src", edge.sourceNodeId.toString());
@@ -211,13 +307,11 @@ public final class Serializer {
         root.add("edges", edgesArray);
 
         final JsonArray notesArray = new JsonArray();
-        for (Note note : graph.getNotes()
-            .values()) notesArray.add(GSON.toJsonTree(note));
+        for (Note note : graph.getNotes()) notesArray.add(GSON.toJsonTree(note));
         root.add("notes", notesArray);
 
         final JsonArray groupsArray = new JsonArray();
-        for (Group group : graph.getGroups()
-            .values()) groupsArray.add(GSON.toJsonTree(group));
+        for (Group group : graph.getGroups()) groupsArray.add(GSON.toJsonTree(group));
         root.add("groups", groupsArray);
 
         return root;
@@ -236,6 +330,31 @@ public final class Serializer {
                         root.get("balanceMode")
                             .getAsString()));
             } catch (final IllegalArgumentException ignored) {}
+        }
+        if (root.has("opsMode")) {
+            graph.setOpsMode(
+                root.get("opsMode")
+                    .getAsBoolean());
+        }
+        // Read independently of everything else, like the per-node targets: an old save has no such
+        // key, and a corrupt one costs the user a preference rather than the chart.
+        if (root.has("excessChoice")) {
+            try {
+                final List<PortRef> anchors = new ArrayList<>();
+                for (final JsonElement elem : root.getAsJsonArray("excessChoice")) {
+                    final JsonObject a = elem.getAsJsonObject();
+                    anchors.add(
+                        new PortRef(
+                            UUID.fromString(
+                                a.get("node")
+                                    .getAsString()),
+                            a.get("port")
+                                .getAsInt(),
+                            a.get("input")
+                                .getAsBoolean()));
+                }
+                if (!anchors.isEmpty()) graph.setExcessChoice(ChoiceKey.of(anchors));
+            } catch (final RuntimeException ignored) {}
         }
         graph.setZoom(
             root.get("zoom")
@@ -260,13 +379,38 @@ public final class Serializer {
             final Node node = new Node(id, x, y);
             node.machineName = obj.get("machine")
                 .getAsString();
-            node.recipeId = Recipe.RecipeId.of(
-                obj.get("recipeId")
-                    .getAsJsonObject());
+            if (obj.has("recipeId")) {
+                node.recipeId = Recipe.RecipeId.of(
+                    obj.get("recipeId")
+                        .getAsJsonObject());
+            }
             node.handlerRecipeIndex = obj.has("handlerRecipeIndex") ? obj.get("handlerRecipeIndex")
                 .getAsInt() : 0;
             node.initExtractor();
             node.refresh();
+
+            if (obj.has("machineCount")) {
+                node.machineConfig.setMachineCount(
+                    obj.get("machineCount")
+                        .getAsInt());
+            }
+            node.setMachineCountFixed(
+                obj.has("machineCountFixed") && obj.get("machineCountFixed")
+                    .getAsBoolean());
+            // Read independently of every other key.
+            if (obj.has("targets")) {
+                for (final Map.Entry<String, JsonElement> t : obj.getAsJsonObject("targets")
+                    .entrySet()) {
+                    try {
+                        node.targetOutputRates.put(
+                            Integer.parseInt(t.getKey()),
+                            t.getValue()
+                                .getAsDouble());
+                    } catch (final NumberFormatException ignored) {
+                        // A malformed key loses one target, not the chart.
+                    }
+                }
+            }
 
             if (obj.has("inputs")) {
                 applySavedPortChances(obj.getAsJsonArray("inputs"), node.inputs);
@@ -278,9 +422,9 @@ public final class Serializer {
             if (obj.has("machineConfig")) {
                 jsonToMachineConfig(obj.getAsJsonObject("machineConfig"), node.machineConfig);
             }
+            node.machineConfig.seedRouteDefaults();
 
-            graph.getNodes()
-                .put(node.id, node);
+            graph.addNode(node);
         }
 
         final JsonArray edgesArray = root.getAsJsonArray("edges");
@@ -299,20 +443,17 @@ public final class Serializer {
                 .getAsInt();
             final int dstIn = obj.get("dstIn")
                 .getAsInt();
-            graph.getEdges()
-                .put(id, new Edge(id, src, dst, srcOut, dstIn));
+            graph.addEdge(new Edge(id, src, dst, srcOut, dstIn));
         }
 
         for (final JsonElement elem : root.getAsJsonArray("notes")) {
             final Note note = GSON.fromJson(elem, Note.class);
-            graph.getNotes()
-                .put(note.getId(), note);
+            graph.notes.put(note.getId(), note);
         }
 
         for (final JsonElement elem : root.getAsJsonArray("groups")) {
             final Group group = GSON.fromJson(elem, Group.class);
-            graph.getGroups()
-                .put(group.getId(), group);
+            graph.groups.put(group.getId(), group);
         }
 
         return graph;
@@ -388,19 +529,20 @@ public final class Serializer {
     }
 
     private static void jsonToMachineConfig(final JsonObject obj, final MachineConfig cfg) {
+        // "profile" is omitted for the default profile, but its settings are still written.
         if (obj.has("profile")) {
             cfg.profileId = obj.get("profile")
                 .getAsString();
-            if (obj.has("settings")) {
-                final JsonObject settingsObj = obj.getAsJsonObject("settings");
-                for (final Map.Entry<String, JsonElement> entry : settingsObj.entrySet()) {
-                    final JsonElement el = entry.getValue();
-                    if (el.isJsonPrimitive()) {
-                        final var prim = el.getAsJsonPrimitive();
-                        if (prim.isBoolean()) cfg.settings.put(entry.getKey(), prim.getAsBoolean());
-                        else if (prim.isNumber()) cfg.settings.put(entry.getKey(), prim.getAsInt());
-                        else cfg.settings.put(entry.getKey(), prim.getAsString());
-                    }
+        }
+        if (obj.has("settings")) {
+            final JsonObject settingsObj = obj.getAsJsonObject("settings");
+            for (final Map.Entry<String, JsonElement> entry : settingsObj.entrySet()) {
+                final JsonElement el = entry.getValue();
+                if (el.isJsonPrimitive()) {
+                    final var prim = el.getAsJsonPrimitive();
+                    if (prim.isBoolean()) cfg.settings.put(entry.getKey(), prim.getAsBoolean());
+                    else if (prim.isNumber()) cfg.settings.put(entry.getKey(), prim.getAsInt());
+                    else cfg.settings.put(entry.getKey(), prim.getAsString());
                 }
             }
         }
@@ -455,8 +597,7 @@ public final class Serializer {
 
     @Nonnull
     private static String edgeLabel(final Graph graph, final Edge edge) {
-        final Node src = graph.getNodes()
-            .get(edge.sourceNodeId);
+        final Node src = graph.nodes.get(edge.sourceNodeId);
         if (src == null) return "";
 
         final int idx = edge.sourceOutputIndex;

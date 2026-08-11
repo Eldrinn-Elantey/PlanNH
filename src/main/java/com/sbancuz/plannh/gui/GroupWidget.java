@@ -2,6 +2,7 @@ package com.sbancuz.plannh.gui;
 
 import static com.sbancuz.plannh.data.flowchart.Group.GROUP_MIN_W;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -151,8 +152,10 @@ public class GroupWidget extends FlowchartWidget<GroupWidget, Group> {
 
     @Override
     protected Map<UUID, Group> getDefaultContainer() {
-        return canvas.getGraph()
-            .getGroups();
+        final Map<UUID, Group> out = new HashMap<>();
+        for (final Group g : canvas.getGraph()
+            .getGroups()) out.put(g.getId(), g);
+        return out;
     }
 
     public int getMouseGroupX() {

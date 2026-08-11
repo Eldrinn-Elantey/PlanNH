@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import com.sbancuz.plannh.data.effect.EffectResult;
 import com.sbancuz.plannh.data.flowchart.Node;
@@ -22,12 +23,18 @@ public class MachineConfig {
         this(parentRef, MachineProfileRegistry.get(MachineProfileRegistry.defaultId()));
     }
 
-    public MachineConfig(final Node parentRef, final MachineProfile profile) {
+    public MachineConfig(final Node parentRef, @Nullable final MachineProfile requested) {
         this.parentRef = parentRef;
+        // An unknown profile id means the chart was saved with a mod (or a mod version) that is
+        // not present now. That is a chart to degrade, not a save to lose: fall back to the
+        // default profile, exactly as getProfile() does for the same reason.
+        final MachineProfile profile = requested != null ? requested
+            : MachineProfileRegistry.get(MachineProfileRegistry.defaultId());
         this.profileId = profile.id();
         for (final SettingDef<?> def : profile.settings()) {
             settings.putIfAbsent(def.key, def.defaultValue);
         }
+        settings.putIfAbsent(Settings.MACHINES.key(), Settings.MACHINES.def().defaultValue);
     }
 
     @Nonnull
@@ -66,6 +73,35 @@ public class MachineConfig {
         parentRef.refresh();
     }
 
+    /**
+     * Applies the profile's per-recipe-map route defaults (e.g. Perfect OC on for specific recipe
+     * machines) to the settings. Only values still at the profile default are overridden, so a
+     * user's explicit choice is never clobbered.
+     */
+    public void seedRouteDefaults() {
+        final RecipeContext ctx = new RecipeContext(parentRef.properties);
+        final MachineProfile profile = getProfile();
+        final Map<String, Object> defaults = profile.effectComputer()
+            .routeDefaults(ctx);
+        if (defaults.isEmpty()) return;
+        for (final Map.Entry<String, Object> e : defaults.entrySet()) {
+            final Object current = settings.get(e.getKey());
+            if (current == null) {
+                settings.put(e.getKey(), e.getValue());
+                continue;
+            }
+            final Object profileDefault = profile.settings()
+                .stream()
+                .filter(def -> def.key.equals(e.getKey()))
+                .map(def -> def.defaultValue)
+                .findFirst()
+                .orElse(null);
+            if (profileDefault != null && current.equals(profileDefault)) {
+                settings.put(e.getKey(), e.getValue());
+            }
+        }
+    }
+
     @Nonnull
     public EffectResult computeEffect(final Map<RecipeProperty<?>, Object> properties) {
         final MachineProfile profile = getProfile();
@@ -79,6 +115,14 @@ public class MachineConfig {
             result = new EffectResult(newDuration, newEnergyPerT, result.throughputFactor());
         }
         return result;
+    }
+
+    public int getMachineCount() {
+        return getInt(Settings.MACHINES.key());
+    }
+
+    public void setMachineCount(final int count) {
+        settings.put(Settings.MACHINES.key(), count);
     }
 
     public float inputMultiplier(final int inputIndex) {

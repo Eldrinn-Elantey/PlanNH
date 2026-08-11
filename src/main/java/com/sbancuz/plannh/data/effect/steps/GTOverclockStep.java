@@ -85,6 +85,13 @@ public class GTOverclockStep implements EffectStep, EffectComputer {
     }
 
     @Override
+    public Map<String, Object> routeDefaults(final RecipeContext ctx) {
+        final RecipeMap<?> map = ctx.getOrDefault(RECIPE_MAP, null);
+        if (map == null || routeDefaults.isEmpty()) return Map.of();
+        return routeDefaults.getOrDefault(map.unlocalizedName, Map.of());
+    }
+
+    @Override
     public EffectResult apply(EffectResult current, Map<String, Object> s, RecipeContext ctx) {
         forceHeat = false;
         forcePerfectOC = false;

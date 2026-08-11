@@ -2,6 +2,7 @@ package com.sbancuz.plannh.data.flowchart;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +36,18 @@ public class Node {
 
     public final MachineConfig machineConfig;
     public final Map<RecipeProperty<?>, Object> properties = new HashMap<>();
+
+    @Getter
+    @Setter
+    private boolean machineCountFixed;
+
+    /**
+     * Target production rates by output port index, in ingredient units per second. A target is
+     * a pin: AUTO holds the machine's extent so the targeted output hits the rate exactly, and
+     * the rest of the chart follows. With several targets on one machine the largest implied
+     * extent wins - parallel outputs share one extent, so only the tightest can be exact.
+     */
+    public final Map<Integer, Double> targetOutputRates = new LinkedHashMap<>();
 
     @Getter
     private transient PropertyProvider extractor;
@@ -71,6 +84,7 @@ public class Node {
         }
 
         refresh();
+        machineConfig.seedRouteDefaults();
     }
 
     public void refresh() {
@@ -126,6 +140,7 @@ public class Node {
         }
 
         refresh();
+        machineConfig.seedRouteDefaults();
     }
 
     private PropertyProvider pickBestExtractor(final IRecipeHandler handler, final int recipeIndex) {

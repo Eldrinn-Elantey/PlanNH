@@ -56,6 +56,7 @@ plannh.settings.steam_duration_modifier=Steam Spd%
 ## Properties
 ## Properties - General
 plannh.properties.duration_ticks=Duration
+plannh.properties.num_components=Components
 
 ## Properties - GT (and friends)
 plannh.properties.gt.special_value=Special Value
@@ -111,6 +112,65 @@ plannh.share.slot_imported=Imported
 plannh.share.copy_to_clipboard=Plan exported to clipboard
 plannh.share.copy_from_clipboard=Plan imported from clipboard
 
+## GUI
+## GUI - Balancer
+plannh.gui.balancer_mode=Mode: %s
+plannh.gui.balancer_mode.none=Normal
+plannh.gui.balancer_mode.input=Fixed Machines (input%s)
+plannh.gui.balancer_mode.output=Fixed Machines (output%s)
+plannh.gui.balancer_mode.auto=Auto%s
+
+## GUI - Balancer messages
+## Failures
+plannh.solver.no_pin=Nothing is pinned - fix a machine count to ask for a balance
+plannh.solver.empty_graph=Empty graph
+plannh.solver.balance_failed=Balance failed: %s
+plannh.solver.validation_failed=Solution failed independent validation: %s
+## Wiring diagnostics
+plannh.solver.wiring_import='%s' imports %s externally, but is produced at '%s' - missing an edge?
+plannh.solver.wiring_unlinked='%s' sources %s externally, but an unlinked part of the chart produces it at '%s' - missing an edge?
+plannh.solver.overshoots_target='%s' overshoots its %s target: %s/s produced for a target of %s/s, because another output on the same machine asks for more
+## Alternatives search
+plannh.solver.showing_closest=Showing the closest %d of %d workable answers
+plannh.solver.stopped_early=Stopped after %d combinations, so there may be more than the ones listed (%d not tried)
+plannh.solver.choice_no_longer_fits=The saved excess choice no longer fits this chart - showing the solver's own answer
+plannh.solver.choice_needs_more_gates=The saved excess choice needs more gates than the solver's answer, so it was dropped
+## Pipeline diagnostics
+plannh.solver.pins_conflict=These pins cannot hold together, and dropping them makes the chart solvable: %s
+plannh.solver.stage_failed=%s %s
+plannh.solver.machines_cannot_run=%d machines cannot run: %s
+plannh.solver.budget=Ran out of solve budget, solver state %s
+plannh.solver.unsatisfiable=Found no solution, solver state %s
+plannh.solver.no_solution=Found no solution
+plannh.solver.not_conserving=Returned a point that does not conserve: %s
+plannh.solver.negative_extent=Returned a negative extent %s
+plannh.solver.negative_flow=Returned a negative edge flow %s
+plannh.solver.inexact_residual=Returned an inexact port residual %s
+plannh.solver.under_supply=Returned a port that under-supplies: residual %s
+plannh.solver.gate_count_not_certified=Gate count %d is minimal but not certified optimal (exact search over budget)
+## Names
+plannh.solver.pin_extent=extent pin
+plannh.solver.pin_target=target rate
+plannh.solver.pin_count=fixed machine count
+plannh.solver.pref_fewest_gates=fewest gates
+plannh.solver.pref_fewest_imports=fewest imports
+plannh.solver.pref_least_excess=least excess
+plannh.solver.pref_least_flow=least internal flow
+## Rank reasons
+plannh.solver.reason_equally_valid=equally valid
+plannh.solver.reason_imports_instead=imports instead of leaving a surplus
+plannh.solver.reason_moves_more=moves more material
+plannh.solver.reason_moves_less=moves less material
+plannh.solver.reason_voids_more=leans on the outside more
+plannh.solver.reason_crosses_more=crosses the boundary more
+plannh.solver.reason_imports_more=imports more
+plannh.solver.reason_leaves_excess=leaves more excess
+## Boundary labels
+plannh.solver.boundary_excess=excess %s
+plannh.solver.boundary_add=add %s
+plannh.solver.boundary_flow=%s
+plannh.solver.boundary_nothing=nothing crosses the boundary
+
 ## NEI config
 nei.options.plannh = "PlanNH";
 nei.options.plannh.item_columns=Item Columns
@@ -121,6 +181,10 @@ nei.options.plannh.burnable_override=Show burnable setting
 nei.options.plannh.burnable_override.0=Off
 nei.options.plannh.burnable_override.1=On
 nei.options.plannh.burnable_override.tip=Hide/Show burnable setting override in recipe configs (may help if some items don't show when a recipes has multiple outputs)
+nei.options.keys.plannh=PlanNH
+nei.options.keys.plannh.undo=Undo
+nei.options.keys.plannh.redo=Redo
+nei.options.keys.plannh.redo_alt=Redo (alternate)
 nei.options.plannh.show_grid=Show grid
 nei.options.plannh.show_grid.0=Off
 nei.options.plannh.show_grid.1=On
