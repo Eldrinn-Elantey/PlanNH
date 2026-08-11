@@ -16,6 +16,7 @@ public final class PlannhColors {
         SUMMARY_BG        = C.argb("summary_bg",         "0x2D1E1E23"),
         SUMMARY_TITLE_BG  = C.argb("summary_title_bg",   "0x3C323237"),
         NODE_BG           = C.argb("node_bg",            "0x323232E6"),
+        CHIP_BG           = C.argb("chip_bg",            "0xE6141414"),
         NOTE_BG           = C.argb("note_bg",            "0xC8FFF0A0"),
         NOTE_BG_EDITING   = C.argb("note_bg_editing",    "0xE6FFFAE0"),
         SETTINGS_PANEL_BG = C.argb("settings_panel_bg",  "0xAA202020");
@@ -37,7 +38,9 @@ public final class PlannhColors {
         SECTION_INPUT     = C.argb("section_input",      "0x3250A050"),
         SECTION_FLUID_OUT = C.argb("section_fluid_out",  "0x323C8CB4"),
         SECTION_FLUID_IN  = C.argb("section_fluid_in",   "0x323C64B4"),
-        SECTION_OPS       = C.argb("section_ops",        "0x326478C8");
+        SECTION_OPS       = C.argb("section_ops",        "0x326478C8"),
+        SECTION_CHOICE    = C.argb("section_choice",     "0x3250A0A0"),
+        SECTION_WARN      = C.argb("section_warn",       "0x32C86450");
 
     // ── Text Colors (opaque) ──
     public static final ColorResource

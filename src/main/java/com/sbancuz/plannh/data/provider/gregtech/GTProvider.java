@@ -39,6 +39,9 @@ import gregtech.nei.GTNEIDefaultHandler.CachedDefaultRecipe;
 
 public class GTProvider implements PropertyProvider {
 
+    /** GT5u stores a chance as 1..10000, where 10000 is 100%. */
+    private static final float GT_CHANCE_SCALE = 10_000f;
+
     public static final RecipeProperty<Integer> SPECIAL_VALUE = RecipeProperty.<Integer>builder("special_value", 0)
         .build();
     static final RecipeProperty<Integer> GLASS_TIER = RecipeProperty.<Integer>builder("bartworks.glass_tier", 3)
@@ -275,38 +278,40 @@ public class GTProvider implements PropertyProvider {
         node.inputs.clear();
         node.outputs.clear();
 
-        // GT recipe arrays may contain null slots (e.g. gap outputs); skip them.
+        // GT recipe arrays may contain null slots (e.g. gap outputs); skip them. Stacks are
+        // copied because Port.merge mutates amounts in place - wrapping the live recipe stacks
+        // corrupts the shared GT recipe on every extraction.
         for (int i = 0; i < r.mInputs.length; i++) {
             if (r.mInputs[i] == null || r.mInputs[i].stackSize <= 0) continue;
             node.inputs.add(
                 new Port<>(
                     RecipePropertyAPI.ITEM,
-                    r.mInputs[i],
-                    r.mInputChances != null ? r.mInputChances[i] / 100.0f : 1.f));
+                    r.mInputs[i].copy(),
+                    r.mInputChances != null ? r.mInputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mOutputs.length; i++) {
             if (r.mOutputs[i] == null) continue;
             node.outputs.add(
                 new Port<>(
                     RecipePropertyAPI.ITEM,
-                    r.mOutputs[i],
-                    r.mOutputChances != null ? r.mOutputChances[i] / 100.0f : 1.f));
+                    r.mOutputs[i].copy(),
+                    r.mOutputChances != null ? r.mOutputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mFluidInputs.length; i++) {
             if (r.mFluidInputs[i] == null || r.mFluidInputs[i].amount <= 0) continue;
             node.inputs.add(
                 new Port<>(
                     RecipePropertyAPI.FLUID,
-                    r.mFluidInputs[i],
-                    r.mFluidInputChances != null ? r.mFluidInputChances[i] / 100.0f : 1.f));
+                    r.mFluidInputs[i].copy(),
+                    r.mFluidInputChances != null ? r.mFluidInputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mFluidOutputs.length; i++) {
             if (r.mFluidOutputs[i] == null) continue;
             node.outputs.add(
                 new Port<>(
                     RecipePropertyAPI.FLUID,
-                    r.mFluidOutputs[i],
-                    r.mFluidOutputChances != null ? r.mFluidOutputChances[i] / 100.0f : 1.f));
+                    r.mFluidOutputs[i].copy(),
+                    r.mFluidOutputChances != null ? r.mFluidOutputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
 
         node.inputs.removeIf(p -> p.getValue() instanceof ItemStack stack && stack.getItem() instanceof ItemFluidDisplay);

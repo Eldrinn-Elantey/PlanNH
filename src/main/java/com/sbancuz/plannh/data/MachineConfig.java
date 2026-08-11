@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import com.sbancuz.plannh.data.flowchart.Node;
 
@@ -20,8 +21,13 @@ public class MachineConfig {
         this(parentRef, MachineProfileRegistry.get(MachineProfileRegistry.defaultId()));
     }
 
-    public MachineConfig(final Node parentRef, final MachineProfile profile) {
+    public MachineConfig(final Node parentRef, @Nullable final MachineProfile requested) {
         this.parentRef = parentRef;
+        // An unknown profile id means the chart was saved with a mod (or a mod version) that is
+        // not present now. That is a chart to degrade, not a save to lose: fall back to the
+        // default profile, exactly as getProfile() does for the same reason.
+        final MachineProfile profile = requested != null ? requested
+            : MachineProfileRegistry.get(MachineProfileRegistry.defaultId());
         this.profileId = profile.id();
         for (final SettingDef<?> def : profile.settings()) {
             settings.putIfAbsent(def.key, def.defaultValue);

@@ -88,6 +88,7 @@ plannh.gui.balancer_mode=Mode: %s
 plannh.gui.balancer_mode.none=Normal
 plannh.gui.balancer_mode.input=Fixed Machines (input%s)
 plannh.gui.balancer_mode.output=Fixed Machines (output%s)
+plannh.gui.balancer_mode.auto=Auto%s
 
 ## NEI config
 nei.options.plannh = "PlanNH";

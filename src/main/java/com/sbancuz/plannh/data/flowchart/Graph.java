@@ -1,8 +1,9 @@
 package com.sbancuz.plannh.data.flowchart;
 
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import lombok.Getter;
@@ -11,10 +12,15 @@ import lombok.Setter;
 public class Graph {
 
     // TODO make these use getters
-    public final Map<UUID, Node> nodes = new HashMap<>();
-    public final Map<UUID, Edge> edges = new HashMap<>();
-    public final Map<UUID, Note> notes = new HashMap<>();
-    public final Map<UUID, Group> groups = new HashMap<>();
+    /**
+     * Sorted, so the graph hands its contents back in id order and every consumer that needs a
+     * reproducible answer gets one without sorting first - the solver, the serializer, the router
+     * and the layout all read these directly.
+     */
+    public final SortedMap<UUID, Node> nodes = new TreeMap<>();
+    public final SortedMap<UUID, Edge> edges = new TreeMap<>();
+    public final SortedMap<UUID, Note> notes = new TreeMap<>();
+    public final SortedMap<UUID, Group> groups = new TreeMap<>();
 
     @Getter
     @Setter
@@ -30,17 +36,36 @@ public class Graph {
     private boolean snapToGrid;
 
     @Getter
-    private Balancer.BalanceMode balanceMode = Balancer.BalanceMode.OUTPUT;
+    private Balancer.BalanceMode balanceMode = Balancer.BalanceMode.AUTO;
     @Getter
     private boolean opsMode;
 
+    /**
+     * Which of the equally-workable answers the user picked, or null for the solver's own. Applied
+     * as a preference, never as a constraint: a key that no longer fits the chart is dropped with a
+     * note rather than allowed to degrade it.
+     */
+    @Getter
+    private AutoBalancer.ChoiceKey excessChoice;
+
     private Balancer.BalanceResult balance = null;
     private Summary summary = null;
+    /**
+     * The two display views, built on first ask after a solve rather than with it: the canvas wants
+     * the boundary every frame and never the choices, the summary panel wants the reverse.
+     */
+    private List<BalanceView.Boundary> boundaryView = null;
+    private BalanceView.Choices choicesView = null;
 
     private boolean dirty = true;
 
     public void markDirty() {
         dirty = true;
+    }
+
+    public void setExcessChoice(final AutoBalancer.ChoiceKey choice) {
+        excessChoice = choice;
+        markDirty();
     }
 
     public void setBalanceMode(final Balancer.BalanceMode mode) {
@@ -64,14 +89,42 @@ public class Graph {
         if (dirty) {
             balance = Balancer.balance(this, balanceMode, opsMode);
             summary = Summary.compute(balance, this, opsMode);
+            boundaryView = null;
+            choicesView = null;
             dirty = false;
         }
         return balance;
     }
 
+    /**
+     * Every answer that balances this chart as well as the one on screen. Produced by the same pass
+     * that produced the balance, so asking costs nothing beyond the solve that already happened.
+     */
+    public AutoBalancer.Alternatives alternatives() {
+        final AutoBalancer.Alternatives computed = balance().alternatives();
+        return computed == null ? new AutoBalancer.Alternatives(null, List.of(), true, List.of()) : computed;
+    }
+
     public Summary summary() {
         balance(); // ensure up-to-date
         return summary;
+    }
+
+    /**
+     * Everything crossing the chart's boundary. Held from solve to solve because the canvas asks
+     * once per frame and the answer only moves when the chart does.
+     */
+    public List<BalanceView.Boundary> boundary() {
+        balance(); // drops a view built before the last edit
+        if (boundaryView == null) boundaryView = BalanceView.boundary(this);
+        return boundaryView;
+    }
+
+    /** The equally-workable answers, grouped by the question each one answers. Cached as above. */
+    public BalanceView.Choices choices() {
+        balance();
+        if (choicesView == null) choicesView = BalanceView.choices(this);
+        return choicesView;
     }
 
     public Collection<Node> getNodes() {

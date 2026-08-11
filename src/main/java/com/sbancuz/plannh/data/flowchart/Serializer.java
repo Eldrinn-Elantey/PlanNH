@@ -5,9 +5,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -19,12 +21,14 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.SettingDef;
 import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
+import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
 
 import codechicken.nei.recipe.Recipe;
 
@@ -99,6 +103,7 @@ public final class Serializer {
             final JsonObject slotObj = new JsonObject();
             slotObj.addProperty("name", slot.name);
             slotObj.addProperty("data", encode(slot.graph));
+            slotObj.add("sectionFolds", foldsToJson(slot.collapsedSummarySections));
             arr.add(slotObj);
         }
         root.add("slots", arr);
@@ -132,12 +137,59 @@ public final class Serializer {
             final JsonObject obj = elem.getAsJsonObject();
             final String name = obj.get("name")
                 .getAsString();
-            final String data = obj.get("data")
-                .getAsString();
-            final Graph graph = decode(data);
-            set.slots.add(new SlotSet.Slot(name, graph));
+            // One unreadable chart costs that chart, not the save; the empty graph keeps slot
+            // numbering in place.
+            SlotSet.Slot slot;
+            try {
+                slot = new SlotSet.Slot(
+                    name,
+                    decode(
+                        obj.get("data")
+                            .getAsString()));
+            } catch (final RuntimeException e) {
+                PlanNH.LOG.error("Slot '{}' could not be read and was left empty", name, e);
+                slot = new SlotSet.Slot(name, new Graph());
+            }
+            if (obj.has("sectionFolds")) {
+                foldsFromJson(obj.getAsJsonObject("sectionFolds"), slot.collapsedSummarySections);
+            }
+            set.slots.add(slot);
         }
         return set;
+    }
+
+    /**
+     * Every section, not just the folded ones: a section this save has never heard of has to be
+     * distinguishable from one the user deliberately left open, or adding a section would silently
+     * unfold it for everyone who had already saved.
+     */
+    private static JsonObject foldsToJson(final Set<SummarySection> folded) {
+        final JsonObject folds = new JsonObject();
+        for (final SummarySection section : SummarySection.values()) {
+            folds.addProperty(section.name(), folded.contains(section));
+        }
+        return folds;
+    }
+
+    /**
+     * Reads section by section over whatever {@code folded} already holds rather than replacing it:
+     * an unmentioned section is one the save predates, and it keeps the fold a fresh chart gives it.
+     */
+    private static void foldsFromJson(final JsonObject folds, final Set<SummarySection> folded) {
+        for (final var fold : folds.entrySet()) {
+            final SummarySection section;
+            try {
+                section = SummarySection.valueOf(fold.getKey());
+            } catch (final IllegalArgumentException ignored) {
+                continue; // a section this build has dropped
+            }
+            if (fold.getValue()
+                .getAsBoolean()) {
+                folded.add(section);
+            } else {
+                folded.remove(section);
+            }
+        }
     }
 
     /**
@@ -194,6 +246,23 @@ public final class Serializer {
             graph.getBalanceMode()
                 .name());
         root.addProperty("opsMode", graph.isOpsMode());
+        // The chosen answer travels as the ports it opens, never as gate indices: those are rebuilt
+        // from scratch on every solve and mean nothing across a save.
+        if (graph.getExcessChoice() != null) {
+            final JsonArray anchors = new JsonArray();
+            for (final AutoBalancer.PortRef ref : graph.getExcessChoice()
+                .gateAnchors()) {
+                final JsonObject a = new JsonObject();
+                a.addProperty(
+                    "node",
+                    ref.nodeId()
+                        .toString());
+                a.addProperty("port", ref.portIndex());
+                a.addProperty("input", ref.input());
+                anchors.add(a);
+            }
+            root.add("excessChoice", anchors);
+        }
         root.addProperty("zoom", graph.getZoom());
         root.addProperty("panX", graph.getPanX());
         root.addProperty("panY", graph.getPanY());
@@ -205,12 +274,23 @@ public final class Serializer {
             obj.addProperty("x", node.x);
             obj.addProperty("y", node.y);
             obj.addProperty("machine", node.machineName);
-            obj.add("recipeId", node.recipeId.toJsonObject());
+            // Null-tolerant on both sides: an unresolved recipe must not make the slot
+            // unsaveable, and downstream treats a null recipeId as "handler unavailable".
+            if (node.recipeId != null) {
+                obj.add("recipeId", node.recipeId.toJsonObject());
+            }
             obj.addProperty("handlerRecipeIndex", node.handlerRecipeIndex);
             obj.addProperty("extractorIndex", node.getExtractorIndex());
             obj.addProperty("machineCount", node.machineConfig.getMachineCount());
             if (node.isMachineCountFixed()) {
                 obj.addProperty("machineCountFixed", true);
+            }
+            if (!node.targetOutputRates.isEmpty()) {
+                final JsonObject targets = new JsonObject();
+                for (final Map.Entry<Integer, Double> t : node.targetOutputRates.entrySet()) {
+                    targets.addProperty(String.valueOf(t.getKey()), t.getValue());
+                }
+                obj.add("targets", targets);
             }
 
             obj.add("inputs", portListToJson(node.inputs));
@@ -260,6 +340,26 @@ public final class Serializer {
                 root.get("opsMode")
                     .getAsBoolean());
         }
+        // Read independently of everything else, like the per-node targets: an old save has no such
+        // key, and a corrupt one costs the user a preference rather than the chart.
+        if (root.has("excessChoice")) {
+            try {
+                final List<AutoBalancer.PortRef> anchors = new ArrayList<>();
+                for (final JsonElement elem : root.getAsJsonArray("excessChoice")) {
+                    final JsonObject a = elem.getAsJsonObject();
+                    anchors.add(
+                        new AutoBalancer.PortRef(
+                            UUID.fromString(
+                                a.get("node")
+                                    .getAsString()),
+                            a.get("port")
+                                .getAsInt(),
+                            a.get("input")
+                                .getAsBoolean()));
+                }
+                if (!anchors.isEmpty()) graph.setExcessChoice(AutoBalancer.ChoiceKey.of(anchors));
+            } catch (final RuntimeException ignored) {}
+        }
         graph.setZoom(
             root.get("zoom")
                 .getAsFloat());
@@ -283,9 +383,11 @@ public final class Serializer {
             final Node node = new Node(id, x, y);
             node.machineName = obj.get("machine")
                 .getAsString();
-            node.recipeId = Recipe.RecipeId.of(
-                obj.get("recipeId")
-                    .getAsJsonObject());
+            if (obj.has("recipeId")) {
+                node.recipeId = Recipe.RecipeId.of(
+                    obj.get("recipeId")
+                        .getAsJsonObject());
+            }
             node.handlerRecipeIndex = obj.has("handlerRecipeIndex") ? obj.get("handlerRecipeIndex")
                 .getAsInt() : 0;
             node.setExtractorIndex(
@@ -302,6 +404,20 @@ public final class Serializer {
             node.setMachineCountFixed(
                 obj.has("machineCountFixed") && obj.get("machineCountFixed")
                     .getAsBoolean());
+            // Read independently of every other key.
+            if (obj.has("targets")) {
+                for (final Map.Entry<String, JsonElement> t : obj.getAsJsonObject("targets")
+                    .entrySet()) {
+                    try {
+                        node.targetOutputRates.put(
+                            Integer.parseInt(t.getKey()),
+                            t.getValue()
+                                .getAsDouble());
+                    } catch (final NumberFormatException ignored) {
+                        // A malformed key loses one target, not the chart.
+                    }
+                }
+            }
 
             if (obj.has("inputs")) {
                 applySavedPortChances(obj.getAsJsonArray("inputs"), node.inputs);

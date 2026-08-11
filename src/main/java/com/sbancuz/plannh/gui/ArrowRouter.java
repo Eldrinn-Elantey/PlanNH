@@ -2,6 +2,7 @@ package com.sbancuz.plannh.gui;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -47,6 +48,13 @@ public final class ArrowRouter {
      */
     private static final int ANCHOR_COST = 30;
 
+    /**
+     * World units a no-turn zone is grown by. One router cell, because that is the granularity the
+     * grid can actually express: a smaller pad would round away to nothing on most edges and to a
+     * whole cell on others, which is worse than either.
+     */
+    private static final int NO_TURN_PAD = 6;
+
     /** Hard cap on grid cells; the cell size is grown if a region would exceed it. */
     private static final int MAX_CELLS = 200_000;
     /** Padding added around the bounding region so arrows can route around outer nodes. */
@@ -81,6 +89,32 @@ public final class ArrowRouter {
      * @return a map from {@link Request#key()} to a list of {@code {x, y}} world-space waypoints
      */
     public Map<UUID, List<int[]>> route(final List<Rect> obstacles, final List<Request> requests) {
+        return route(obstacles, List.of(), requests);
+    }
+
+    /**
+     * @param noTurn regions an arrow may cross but may not change direction inside.
+     *
+     *               <p>
+     *               For the boundary chips: blocking them outright seals the approach to any pin
+     *               one is parked in front of, and a request that cannot be served falls back to a
+     *               straight line that ignores every obstacle - worse than the overlap, and silent.
+     *               A straight run behind a label reads fine; it is the corner that looks like the
+     *               arrow terminates there.
+     */
+    public Map<UUID, List<int[]>> route(final List<Rect> obstacles, final List<Rect> noTurn,
+        final List<Request> requests) {
+        return route(obstacles, noTurn, requests, null);
+    }
+
+    /**
+     * @param fellBack if given, receives the key of every request A* could not serve, which came
+     *                 back as the obstacle-ignoring {@link #fallback}. A route that quietly gives up
+     *                 looks identical on screen to one that went somewhere silly on purpose, and
+     *                 only one of those is worth investigating.
+     */
+    public Map<UUID, List<int[]>> route(final List<Rect> obstacles, final List<Rect> noTurn,
+        final List<Request> requests, final Collection<UUID> fellBack) {
         final Map<UUID, List<int[]>> result = new HashMap<>();
         if (requests.isEmpty()) return result;
 
@@ -92,6 +126,12 @@ public final class ArrowRouter {
             minY = Math.min(minY, r.y - margin);
             maxX = Math.max(maxX, r.x + r.w + margin);
             maxY = Math.max(maxY, r.y + r.h + margin);
+        }
+        for (final Rect r : noTurn) {
+            minX = Math.min(minX, r.x);
+            minY = Math.min(minY, r.y);
+            maxX = Math.max(maxX, r.x + r.w);
+            maxY = Math.max(maxY, r.y + r.h);
         }
         final int stub = margin + baseCell;
         for (final Request q : requests) {
@@ -117,6 +157,7 @@ public final class ArrowRouter {
 
         final Grid grid = new Grid(minX, minY, cols, rows, cell, stub);
         grid.blockObstacles(obstacles, margin);
+        grid.markNoTurn(noTurn, NO_TURN_PAD);
         grid.reserveAnchors(requests);
 
         for (int i = 0; i < requests.size(); i++) {
@@ -126,12 +167,14 @@ public final class ArrowRouter {
             // Forward edges only: for a backward edge the gap is negative, and the Z would cut
             // straight through every node between the two ports.
             if (q.dx > q.sx && q.dx - q.sx < 2 * stub && Math.abs(q.dy - q.sy) < 10 * baseCell) {
+                if (fellBack != null) fellBack.add(q.key);
                 result.put(q.key, fallback(q, stub));
                 continue;
             }
             final List<int[]> cellPath = grid.search(q, i);
             final List<int[]> path;
             if (cellPath == null) {
+                if (fellBack != null) fellBack.add(q.key);
                 path = fallback(q, stub);
             } else {
                 path = grid.toWorld(cellPath, q);
@@ -157,6 +200,8 @@ public final class ArrowRouter {
 
         final int originX, originY, cols, rows, cell, stub;
         final boolean[] blocked;
+        /** Cells an arrow may pass straight through but may not turn in. */
+        final boolean[] straightOnly;
         final int[] occupancy;
         final int[] anchorOwner;
         final int[] gScore;
@@ -172,6 +217,7 @@ public final class ArrowRouter {
             this.cell = cell;
             this.stub = stub;
             this.blocked = new boolean[cols * rows];
+            this.straightOnly = new boolean[cols * rows];
             this.occupancy = new int[cols * rows];
             this.anchorOwner = new int[cols * rows];
             Arrays.fill(anchorOwner, -1);
@@ -210,6 +256,22 @@ public final class ArrowRouter {
                         } else {
                             occupancy[y * cols + x] += MARGIN_COST;
                         }
+                    }
+                }
+            }
+        }
+
+        /**
+         * @param pad world units grown around each zone before it is rasterized. A corner sitting
+         *            exactly on a label's edge still reads as a corner in the label; pushing the
+         *            zone out slightly moves it clear. Cells are {@code cell} units wide, so a pad
+         *            below that only takes effect where the edge already sits near a cell boundary.
+         */
+        void markNoTurn(final List<Rect> zones, final int pad) {
+            for (final Rect r : zones) {
+                for (int y = gy(r.y - pad); y <= gy(r.y + r.h + pad); y++) {
+                    for (int x = gx(r.x - pad); x <= gx(r.x + r.w + pad); x++) {
+                        straightOnly[y * cols + x] = true;
                     }
                 }
             }
@@ -279,6 +341,8 @@ public final class ArrowRouter {
                     if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
                     final int nIdx = ny * cols + nx;
                     if (blocked[nIdx]) continue;
+                    // A corner inside a label reads as the arrow ending there. Crossing it does not.
+                    if (nd != dir && (straightOnly[nIdx] || straightOnly[idx])) continue;
 
                     final int foreignAnchor = anchorOwner[nIdx] != -1 && anchorOwner[nIdx] != requestIndex ? ANCHOR_COST
                         : 0;

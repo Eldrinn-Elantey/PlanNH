@@ -34,14 +34,16 @@ import com.sbancuz.plannh.data.flowchart.Node;
  * <ul>
  * <li>{@code number: N} - the machine count is fixed to N (maps to PlanNH's fixed machine
  * count).</li>
- * <li>{@code target: {ingredient: rate}} - a desired output rate; approximated by fixing the
- * machine count to {@code ceil(target / perMachineRate)}, and surfaced on the
- * {@link LoadedChart} so the future AUT solver mode can treat it as a real constraint.</li>
+ * <li>{@code target: {ingredient: rate}} - a desired output rate; maps to the node's target
+ * output rate pin, which AUTO holds exactly. Also surfaced on {@link LoadedChart#pins()} for
+ * tests that want to rescale or clear it.</li>
  * </ul>
  */
 public final class GtnhFlowLoader {
 
-    public record Pin(String kind, int machineIndex, String machineName, String ingredient, double value) {}
+    /** {@code outputIndex} is the resolved output port for target pins, -1 for number pins. */
+    public record Pin(String kind, int machineIndex, String machineName, String ingredient, double value,
+        int outputIndex) {}
 
     public record LoadedChart(String name, Graph graph, List<Node> machines, List<Pin> pins) {
 
@@ -53,8 +55,9 @@ public final class GtnhFlowLoader {
     private static final int TICKS_PER_SECOND = 20;
 
     /** The bundled corpus, one entry per fixture under {@code /gtnh-flow/}. */
-    public static final String[] CORPUS = { "mk1", "loopGraph", "light_fuel", "light_fuel_hydrogen_loop",
-        "230_platline", "palladium_line", "nanocircuits" };
+    public static final String[] CORPUS = { "mk1", "mk1_tiberium", "loopGraph", "light_fuel",
+        "light_fuel_hydrogen_loop", "230_platline", "palladium_line", "nanocircuits", "cetane", "jet_fuel",
+        "microsheep", "palladium", "twoslack", "excess_choice", "symmetric_choice", "two_decisions" };
 
     /**
      * Machine profiles are normally registered during mod init; headless tests need the default
@@ -131,17 +134,19 @@ public final class GtnhFlowLoader {
                 final int count = (int) asDouble(entry.get("number"), 1.0);
                 node.machineConfig.setMachineCount(count);
                 node.setMachineCountFixed(true);
-                pins.add(new Pin("number", machineIndex, node.machineName, null, count));
+                pins.add(new Pin("number", machineIndex, node.machineName, null, count, -1));
             }
             if (entry.get("target") instanceof final Map<?, ?> targets) {
                 for (final Map.Entry<?, ?> t : targets.entrySet()) {
-                    pins.add(
-                        new Pin(
-                            "target",
-                            machineIndex,
-                            node.machineName,
-                            String.valueOf(t.getKey()),
-                            asDouble(t.getValue(), 0)));
+                    final String ingredient = String.valueOf(t.getKey());
+                    final double rate = asDouble(t.getValue(), 0);
+                    for (int out = 0; out < node.outputs.size(); out++) {
+                        if (TestIngredients.nameOf(node.outputs.get(out))
+                            .equals(ingredient)) {
+                            node.targetOutputRates.put(out, rate);
+                            pins.add(new Pin("target", machineIndex, node.machineName, ingredient, rate, out));
+                        }
+                    }
                 }
             }
 
@@ -167,34 +172,33 @@ public final class GtnhFlowLoader {
             }
         }
 
-        applyTargetPins(machines, pins);
-
         return new LoadedChart(name, graph, machines, pins);
     }
 
     /**
-     * Approximates a target pin the way a player would: fix the machine count to
-     * {@code ceil(target / perMachineRate)} so OUTPUT/INPUT mode solves anchor on it. Only valid
-     * for those modes - the future AUT solver mode replaces this with a real target constraint,
-     * which is why the pins stay surfaced on {@link LoadedChart#pins()}.
+     * Clears every target-rate pin, for tests that need the unpinned chart or want to re-pin at
+     * a different scale. Leaves {@code number:} pins (fixed counts) alone.
      */
-    private static void applyTargetPins(final List<Node> machines, final List<Pin> pins) {
-        for (final Pin pin : pins) {
+    public static void clearTargetPins(final LoadedChart chart) {
+        for (final Pin pin : chart.pins()) {
             if (!"target".equals(pin.kind())) continue;
-            final Node node = machines.get(pin.machineIndex());
-            double perOp = 0;
-            for (final var port : node.outputs) {
-                if (TestIngredients.nameOf(port)
-                    .equals(pin.ingredient())) {
-                    perOp = TestIngredients.quantityOf(port);
-                    break;
-                }
-            }
-            if (perOp <= 0 || node.durationTicks <= 0) continue;
-            final double perMachineRate = perOp * TICKS_PER_SECOND / node.durationTicks;
-            node.machineConfig.setMachineCount((int) Math.ceil(pin.value() / perMachineRate));
-            node.setMachineCountFixed(true);
+            chart.machines()
+                .get(pin.machineIndex()).targetOutputRates.clear();
         }
+    }
+
+    /** Removes every edge delivering into the given machine input; returns how many there were. */
+    public static int removeEdgesInto(final LoadedChart chart, final Node machine, final int inputIndex) {
+        final List<UUID> ids = chart.graph()
+            .getEdges()
+            .stream()
+            .filter(e -> e.targetNodeId.equals(machine.id) && e.targetInputIndex == inputIndex)
+            .map(e -> e.id)
+            .toList();
+        ids.forEach(
+            id -> chart.graph()
+                .removeEdge(id));
+        return ids.size();
     }
 
     private static Map<String, Double> ioMap(final Object raw) {

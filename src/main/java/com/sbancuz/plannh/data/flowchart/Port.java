@@ -63,7 +63,12 @@ public class Port<T> {
 
     public void merge(final Port<?> other) {
         final int newAmount = getAmount() + other.getAmount();
-        this.chance = (this.getAmount() * this.chance + other.getAmount() * other.chance) / newAmount;
+        // An amount-weighted average is undefined when there is no amount to weight by, and the NaN
+        // chance it would leave here reaches the balancer as a NaN coefficient, where it poisons a
+        // whole solve instead of failing anywhere near this line.
+        if (newAmount != 0) {
+            this.chance = (this.getAmount() * this.chance + other.getAmount() * other.chance) / newAmount;
+        }
         type.setAmount(value, newAmount);
     }
 }
