@@ -49,6 +49,9 @@ public class GTProvider implements PropertyProvider {
     // Vanilla furnace: base cook time of 200 ticks (10 seconds)
     private static final int FURNACE_COOK_TICKS = 200;
 
+    /** GT5u stores a chance as 1..10000, where 10000 is 100%. */
+    private static final float GT_CHANCE_SCALE = 10_000f;
+
     public static final RecipeProperty<Integer> SPECIAL_VALUE = RecipeProperty.<Integer>builder("gt.special_value", 0)
         .build();
     static final RecipeProperty<Integer> GLASS_TIER = RecipeProperty.<Integer>builder("gt.bartworks.glass_tier", 3)
@@ -326,14 +329,14 @@ public class GTProvider implements PropertyProvider {
                 new Port<>(
                     RecipePropertyAPI.ITEM,
                     r.mInputs[i],
-                    r.mInputChances != null ? r.mInputChances[i] / 100.0f : 1.f));
+                    r.mInputChances != null ? r.mInputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mOutputs.length; i++) {
             node.outputs.add(
                 new Port<>(
                     RecipePropertyAPI.ITEM,
                     r.mOutputs[i],
-                    r.mOutputChances != null ? r.mOutputChances[i] / 100.0f : 1.f));
+                    r.mOutputChances != null ? r.mOutputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mFluidInputs.length; i++) {
             if (r.mFluidInputs[i].amount <= 0) continue;
@@ -341,14 +344,14 @@ public class GTProvider implements PropertyProvider {
                 new Port<>(
                     RecipePropertyAPI.FLUID,
                     r.mFluidInputs[i],
-                    r.mFluidInputChances != null ? r.mFluidInputChances[i] / 100.0f : 1.f));
+                    r.mFluidInputChances != null ? r.mFluidInputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
         for (int i = 0; i < r.mFluidOutputs.length; i++) {
             node.outputs.add(
                 new Port<>(
                     RecipePropertyAPI.FLUID,
                     r.mFluidOutputs[i],
-                    r.mFluidOutputChances != null ? r.mFluidOutputChances[i] / 100.0f : 1.f));
+                    r.mFluidOutputChances != null ? r.mFluidOutputChances[i] / GT_CHANCE_SCALE : 1.f));
         }
 
         node.inputs.removeIf(p -> p.getValue() instanceof ItemStack stack && stack.getItem() instanceof ItemFluidDisplay);

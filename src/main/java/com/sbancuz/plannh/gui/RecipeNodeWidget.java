@@ -26,6 +26,7 @@ import com.sbancuz.plannh.api.PlanAPI;
 import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
+import com.sbancuz.plannh.data.RecipeContext;
 import com.sbancuz.plannh.data.SettingDef;
 import com.sbancuz.plannh.data.flowchart.Group;
 import com.sbancuz.plannh.data.flowchart.Node;
@@ -650,7 +651,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         final MachineProfile profile = c.getProfile();
         final StringBuilder sb = new StringBuilder();
 
-        for (final SettingDef<?> def : profile.settings()) {
+        for (final SettingDef<?> def : profile.visibleSettings(new RecipeContext(node.properties), c.settings)) {
             final Object val = c.settings.get(def.key);
             if (val == null) continue;
             if (val.equals(def.defaultValue)) continue;
@@ -699,7 +700,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         }));
         y += LINE_H;
 
-        for (final SettingDef<?> def : profile.settings()) {
+        for (final SettingDef<?> def : profile.visibleSettings(new RecipeContext(node.properties), c.settings)) {
             y = drawSetting(x, y, def, c);
         }
 
@@ -813,7 +814,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
 
     private int configRowsHeight() {
         int h = (node.machineConfig.getProfile()
-            .settings()
+            .visibleSettings(new RecipeContext(node.properties), node.machineConfig.settings)
             .size() + 2 + targetableOutputs().size()) * LINE_H;
         if (node.getAvailableExtractors()
             .size() > 1) h += LINE_H;

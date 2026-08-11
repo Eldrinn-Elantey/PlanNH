@@ -84,6 +84,7 @@ public class Node {
         }
 
         refresh();
+        machineConfig.seedRouteDefaults();
     }
 
     public void refresh() {
@@ -139,6 +140,7 @@ public class Node {
         }
 
         refresh();
+        machineConfig.seedRouteDefaults();
     }
 
     private PropertyProvider pickBestExtractor(final IRecipeHandler handler, final int recipeIndex) {
