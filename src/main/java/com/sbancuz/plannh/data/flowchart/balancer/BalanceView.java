@@ -1,4 +1,4 @@
-package com.sbancuz.plannh.data.flowchart;
+package com.sbancuz.plannh.data.flowchart.balancer;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -6,12 +6,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Alternative;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Alternatives;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.ChoiceKey;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.External;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Rank;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Solution;
+import javax.annotation.Nullable;
+
+import com.sbancuz.plannh.data.flowchart.Graph;
+import com.sbancuz.plannh.data.flowchart.Node;
+import com.sbancuz.plannh.data.flowchart.Port;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternative;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternatives;
 import com.sbancuz.plannh.gui.GuiHelper;
 
 /**
@@ -49,19 +50,18 @@ public final class BalanceView {
     /**
      * One flow crossing the chart's edge, named by the port it crosses at.
      *
-     * @param label ready to draw, e.g. {@code "excess 5.00mB/s Beta Ingot"}.
+     * @param label ready to draw, e.g. {@code "excess 5.00mB/s Beta Ingot"} once rendered.
      */
-    public record Boundary(AutoBalancer.PortRef port, Kind kind, double ratePerSecond, String ingredient,
-        String label) {}
+    public record Boundary(PortRef port, Kind kind, double ratePerSecond, String ingredient, Note label) {}
 
     /**
      * One answer on offer.
      *
-     * @param reason what it gives up against the default, empty for the default itself. A
+     * @param reason what it gives up against the default, null for the default itself. A
      *               preference the user cannot read is one they cannot disagree with.
      * @param active whether this is the answer currently on screen.
      */
-    public record Choice(ChoiceKey key, String label, String reason, boolean active) {}
+    public record Choice(ChoiceKey key, Note label, @Nullable Note reason, boolean active) {}
 
     /**
      * The answers to ONE of the chart's independent questions: where a particular surplus goes, or
@@ -69,7 +69,7 @@ public final class BalanceView {
      *
      * @param heading the ingredient the current answer uses, which is what names the decision.
      */
-    public record Group(String heading, List<Choice> rows) {}
+    public record Group(Note heading, List<Choice> rows) {}
 
     /**
      * @param complete false when the search stopped on its budget or its cap. The caller has to say
@@ -78,9 +78,9 @@ public final class BalanceView {
      *                 through. Flattened once at construction: the panel reads it twice per frame,
      *                 to measure itself and again to draw.
      */
-    public record Choices(List<Group> groups, boolean complete, List<String> notes, List<Choice> rows) {
+    public record Choices(List<Group> groups, boolean complete, List<Note> notes, List<Choice> rows) {
 
-        Choices(final List<Group> groups, final boolean complete, final List<String> notes) {
+        Choices(final List<Group> groups, final boolean complete, final List<Note> notes) {
             this(groups, complete, notes, flatten(groups));
         }
 
@@ -99,14 +99,14 @@ public final class BalanceView {
      * frame want {@link Graph#boundary()} rather than this.
      */
     public static List<Boundary> boundary(final Graph graph) {
-        final Solution auto = graph.balance()
-            .auto();
-        if (auto == null) return List.of();
+        final BalanceResult balance = graph.balance();
+        if (!(balance instanceof final BalanceResult.Solved solved)) return List.of();
+        final SolutionView auto = solved.auto();
         final List<Boundary> out = new ArrayList<>();
-        collect(graph, auto.gatedSinks(), Kind.EXCESS, "excess ", out);
-        collect(graph, auto.gatedSources(), Kind.IMPORT, "add ", out);
-        collect(graph, auto.terminalOutputs(), Kind.PRODUCT, "", out);
-        collect(graph, auto.terminalInputs(), Kind.SUPPLY, "", out);
+        collect(graph, auto.gatedSinks, Kind.EXCESS, SolverMessage.BOUNDARY_EXCESS, out);
+        collect(graph, auto.gatedSources, Kind.IMPORT, SolverMessage.BOUNDARY_ADD, out);
+        collect(graph, auto.terminalOutputs, Kind.PRODUCT, SolverMessage.BOUNDARY_FLOW, out);
+        collect(graph, auto.terminalInputs, Kind.SUPPLY, SolverMessage.BOUNDARY_FLOW, out);
         return List.copyOf(out);
     }
 
@@ -120,15 +120,15 @@ public final class BalanceView {
         final Alternatives alternatives = graph.alternatives();
         // Grouped by the decision each option answers, in the order the solver emitted them, so a
         // chart posing two questions shows two short lists instead of one list of everything.
-        final Map<AutoBalancer.PortRef, List<Alternative>> byDecision = new LinkedHashMap<>();
-        final Map<AutoBalancer.PortRef, String> headings = new LinkedHashMap<>();
+        final Map<PortRef, List<Alternative>> byDecision = new LinkedHashMap<>();
+        final Map<PortRef, Note> headings = new LinkedHashMap<>();
         for (final Alternative option : alternatives.options()) {
             byDecision.computeIfAbsent(option.replaces(), k -> new ArrayList<>())
                 .add(option);
             if (option.isCurrent()) headings.put(option.replaces(), describe(graph, option));
         }
         final List<Group> groups = new ArrayList<>();
-        for (final Map.Entry<AutoBalancer.PortRef, List<Alternative>> entry : byDecision.entrySet()) {
+        for (final Map.Entry<PortRef, List<Alternative>> entry : byDecision.entrySet()) {
             // A decision with only its current answer under it is not a decision. Showing it would
             // put a heading above a row that repeats the heading, and imply a choice that is not
             // being offered.
@@ -136,9 +136,12 @@ public final class BalanceView {
                 .size() < 2) continue;
             final List<Choice> rows = new ArrayList<>();
             for (final Alternative option : sortedRows(entry.getValue())) {
-                rows.add(new Choice(option.key(), describe(graph, option), reasonOf(option), option.isCurrent()));
+                rows.add(new Choice(option.key(), describe(graph, option), option.toNote(), option.isCurrent()));
             }
-            groups.add(new Group(headings.getOrDefault(entry.getKey(), ""), List.copyOf(rows)));
+            groups.add(
+                new Group(
+                    headings.getOrDefault(entry.getKey(), SolverMessage.BOUNDARY_NOTHING.toNote()),
+                    List.copyOf(rows)));
         }
         return new Choices(List.copyOf(groups), alternatives.complete(), alternatives.notes());
     }
@@ -162,7 +165,7 @@ public final class BalanceView {
     private static boolean isImport(final Alternative option) {
         return !option.externals()
             .isEmpty() && option.externals()
-                .get(0)
+                .getFirst()
                 .port()
                 .input();
     }
@@ -178,13 +181,12 @@ public final class BalanceView {
 
     /** Whether there is anything to choose between - cheap enough to ask every frame. */
     public static boolean hasChoices(final Graph graph) {
-        final Solution auto = graph.balance()
-            .auto();
-        return auto != null && auto.openGates() > 0;
+        final BalanceResult balance = graph.balance();
+        return balance instanceof final BalanceResult.Solved solved && solved.auto().openGates > 0;
     }
 
-    private static void collect(final Graph graph, final List<External> externals, final Kind kind, final String verb,
-        final List<Boundary> out) {
+    private static void collect(final Graph graph, final List<External> externals, final Kind kind,
+        final SolverMessage message, final List<Boundary> out) {
         for (final External e : externals) {
             final String ingredient = ingredientOf(graph, e);
             if (ingredient == null) continue;
@@ -194,12 +196,12 @@ public final class BalanceView {
                     kind,
                     e.ratePerSecond(),
                     ingredient,
-                    verb + rateOf(graph, e) + " " + ingredient));
+                    message.toNote(rateOf(graph, e) + " " + ingredient)));
         }
     }
 
     /** "excess 5.00/s Beta Ingot" - what this option does at the one port that distinguishes it. */
-    private static String describe(final Graph graph, final Alternative option) {
+    private static Note describe(final Graph graph, final Alternative option) {
         // One gate can cross at several ports of the same ingredient; "75/s water, 90/s water" is
         // two ports, not two decisions, so it reads as one number.
         final Map<String, double[]> merged = new LinkedHashMap<>();
@@ -210,19 +212,21 @@ public final class BalanceView {
             if (sample == null) sample = e;
             merged.computeIfAbsent(ingredient, k -> new double[1])[0] += e.ratePerSecond();
         }
+        if (merged.isEmpty()) {
+            return SolverMessage.BOUNDARY_NOTHING.toNote();
+        }
         final StringBuilder sb = new StringBuilder();
         for (final Map.Entry<String, double[]> entry : merged.entrySet()) {
-            if (sb.length() > 0) sb.append(", ");
-            sb.append(
-                option.externals()
-                    .get(0)
-                    .port()
-                    .input() ? "add " : "excess ")
-                .append(rateOf(graph, sample, entry.getValue()[0]))
+            if (!sb.isEmpty()) sb.append(", ");
+            sb.append(rateOf(graph, sample, entry.getValue()[0]))
                 .append(' ')
                 .append(entry.getKey());
         }
-        return sb.length() == 0 ? "nothing crosses the boundary" : sb.toString();
+        final SolverMessage message = option.externals()
+            .getFirst()
+            .port()
+            .input() ? SolverMessage.BOUNDARY_ADD : SolverMessage.BOUNDARY_EXCESS;
+        return message.toNote(sb.toString());
     }
 
     /**
@@ -236,7 +240,7 @@ public final class BalanceView {
 
     /** As above, but for a rate summed over several ports that share one ingredient. */
     private static String rateOf(final Graph graph, final External at, final double rate) {
-        final Port<?> port = at == null ? null : portOf(graph, at);
+        final Port<?> port = portOf(graph, at);
         return (port == null ? GuiHelper.formatRate((float) rate)
             : port.getType()
                 .formatAmount((float) rate))
@@ -263,38 +267,5 @@ public final class BalanceView {
         final int index = external.port()
             .portIndex();
         return index < 0 || index >= ports.size() ? null : ports.get(index);
-    }
-
-    /**
-     * The one sentence explaining why an answer is not the default. {@link Rank#VOIDS_MORE} needs
-     * two sentences of its own: throwing more away and importing more are both "more external
-     * quantity" to the solver, but calling an import "voids more" is wrong in front of a user.
-     */
-    public static String reasonOf(final Alternative option) {
-        if (option.rank() != Rank.VOIDS_MORE) return reasonOf(option.rank());
-        boolean voids = false;
-        boolean imports = false;
-        for (final External e : option.externals()) {
-            if (e.port()
-                .input()) {
-                imports = true;
-            } else {
-                voids = true;
-            }
-        }
-        if (voids && imports) return "crosses the boundary more";
-        return imports ? "imports more" : "leaves more excess";
-    }
-
-    /** The direction-blind wording, for a rank with no externals to look at. */
-    public static String reasonOf(final Rank rank) {
-        return switch (rank) {
-            case DEFAULT -> "";
-            case EQUALLY_VALID -> "equally valid";
-            case IMPORTS_INSTEAD -> "imports instead of leaving a surplus";
-            case MOVES_MORE -> "moves more material";
-            case MOVES_LESS -> "moves less material";
-            case VOIDS_MORE -> "leans on the outside more";
-        };
     }
 }

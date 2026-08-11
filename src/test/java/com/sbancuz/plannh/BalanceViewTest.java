@@ -2,6 +2,7 @@ package com.sbancuz.plannh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -9,12 +10,14 @@ import java.util.function.Predicate;
 
 import org.junit.jupiter.api.Test;
 
-import com.sbancuz.plannh.data.flowchart.BalanceView;
-import com.sbancuz.plannh.data.flowchart.BalanceView.Boundary;
-import com.sbancuz.plannh.data.flowchart.BalanceView.Choice;
-import com.sbancuz.plannh.data.flowchart.BalanceView.Kind;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Serializer;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView.Boundary;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView.Choice;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView.Kind;
+import com.sbancuz.plannh.data.flowchart.balancer.Note;
+import com.sbancuz.plannh.data.flowchart.balancer.SolverMessage;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 
 /**
@@ -62,17 +65,13 @@ class BalanceViewTest {
             voided.get(0)
                 .ratePerSecond(),
             1e-4);
-        assertTrue(
+        assertEquals(
+            SolverMessage.BOUNDARY_EXCESS,
             voided.get(0)
                 .label()
-                .startsWith("excess "),
+                .message(),
             () -> "reads as surplus, not as waste: " + voided.get(0)
                 .label());
-        assertFalse(
-            voided.get(0)
-                .label()
-                .contains("void"),
-            "nothing here is destroyed");
 
         assertTrue(
             of(flows, Kind.PRODUCT).stream()
@@ -126,25 +125,12 @@ class BalanceViewTest {
                         .get(0)
                         .active(),
                     () -> name + " lists each decision's current answer first");
-                assertFalse(
-                    group.heading()
-                        .isBlank(),
-                    () -> name + " has an unnamed decision");
+                assertNotNull(group.heading(), () -> name + " has an unnamed decision");
             }
             for (final Choice row : choices.rows()) {
-                assertFalse(
-                    row.label()
-                        .isBlank(),
-                    () -> name + " has an unlabelled row");
-                assertFalse(
-                    row.label()
-                        .contains("null"),
-                    () -> name + " failed to resolve an ingredient: " + row.label());
+                assertNotNull(row.label(), () -> name + " has an unlabelled row");
                 if (!row.active()) {
-                    assertFalse(
-                        row.reason()
-                            .isBlank(),
-                        () -> name + " listed an alternative with no reason given");
+                    assertNotNull(row.reason(), () -> name + " listed an alternative with no reason given");
                 }
             }
         }
@@ -158,14 +144,19 @@ class BalanceViewTest {
             .rows();
         final Choice current = onlyRow(rows, Choice::active);
         final Choice alternative = onlyRow(rows, r -> !r.active());
-        assertEquals("imports instead of leaving a surplus", alternative.reason());
-        assertTrue(
+        assertEquals(
+            SolverMessage.REASON_IMPORTS_INSTEAD,
+            alternative.reason()
+                .message());
+        assertEquals(
+            SolverMessage.BOUNDARY_EXCESS,
             current.label()
-                .startsWith("excess "),
+                .message(),
             () -> "default leaves a surplus: " + current.label());
-        assertTrue(
+        assertEquals(
+            SolverMessage.BOUNDARY_ADD,
             alternative.label()
-                .startsWith("add "),
+                .message(),
             () -> "alternative imports: " + alternative.label());
     }
 
@@ -204,7 +195,7 @@ class BalanceViewTest {
             of(graph.boundary(), Kind.EXCESS).stream()
                 .map(Boundary::label)
                 .findFirst()
-                .orElse(""),
+                .orElse(null),
             "and the canvas voids where the user asked");
 
         assertEquals(
@@ -219,17 +210,19 @@ class BalanceViewTest {
         // Both lose on the same objective - more external quantity - but one throws away and the
         // other imports, and one sentence cannot honestly describe both.
         assertEquals(
-            "leaves more excess",
+            SolverMessage.REASON_LEAVES_EXCESS,
             onlyRow(
                 chart("excess_choice").choices()
                     .rows(),
-                r -> !r.active()).reason());
+                r -> !r.active()).reason()
+                    .message());
         assertEquals(
-            "imports more",
+            SolverMessage.REASON_IMPORTS_MORE,
             onlyRow(
                 chart("loopGraph").choices()
                     .rows(),
-                r -> !r.active()).reason());
+                r -> !r.active()).reason()
+                    .message());
     }
 
     @Test
@@ -311,7 +304,7 @@ class BalanceViewTest {
                 for (final Choice row : group.rows()) {
                     if (row.active()) continue; // sorted to the front, not into the amounts
                     final boolean isImport = row.label()
-                        .startsWith("add ");
+                        .message() == SolverMessage.BOUNDARY_ADD;
                     if (isImport) {
                         assertFalse(seenExcess, () -> name + " puts an import after a surplus: " + group.rows());
                     } else if (!seenExcess) {
@@ -329,13 +322,13 @@ class BalanceViewTest {
     }
 
     /**
-     * The number out of "add 33.33/s sulfuric acid", units and all stripped back off. Reads the
-     * label rather than the rate behind it on purpose - the order has to hold for what the panel
-     * shows - so a chart whose rows cross a unit boundary (mB against B) does not belong in the
-     * list above.
+     * The number out of the label's rate argument - "33.33/s sulfuric acid" - units and all
+     * stripped back off. Reads the label rather than the rate behind it on purpose - the order has
+     * to hold for what the panel shows - so a chart whose rows cross a unit boundary (mB against B)
+     * does not belong in the list above.
      */
-    private static double rateOf(final String label) {
-        final String[] words = label.split(" ");
-        return Double.parseDouble(words[1].replaceAll("[^0-9.].*$", ""));
+    private static double rateOf(final Note label) {
+        final String[] words = ((String) label.args()[0]).split(" ");
+        return Double.parseDouble(words[0].replaceAll("[^0-9.].*$", ""));
     }
 }

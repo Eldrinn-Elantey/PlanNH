@@ -26,9 +26,11 @@ import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.SettingDef;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
 import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
+import com.sbancuz.plannh.data.flowchart.balancer.PortRef;
 
 import codechicken.nei.recipe.Recipe;
 
@@ -250,7 +252,7 @@ public final class Serializer {
         // from scratch on every solve and mean nothing across a save.
         if (graph.getExcessChoice() != null) {
             final JsonArray anchors = new JsonArray();
-            for (final AutoBalancer.PortRef ref : graph.getExcessChoice()
+            for (final PortRef ref : graph.getExcessChoice()
                 .gateAnchors()) {
                 final JsonObject a = new JsonObject();
                 a.addProperty(
@@ -344,11 +346,11 @@ public final class Serializer {
         // key, and a corrupt one costs the user a preference rather than the chart.
         if (root.has("excessChoice")) {
             try {
-                final List<AutoBalancer.PortRef> anchors = new ArrayList<>();
+                final List<PortRef> anchors = new ArrayList<>();
                 for (final JsonElement elem : root.getAsJsonArray("excessChoice")) {
                     final JsonObject a = elem.getAsJsonObject();
                     anchors.add(
-                        new AutoBalancer.PortRef(
+                        new PortRef(
                             UUID.fromString(
                                 a.get("node")
                                     .getAsString()),
@@ -357,7 +359,7 @@ public final class Serializer {
                             a.get("input")
                                 .getAsBoolean()));
                 }
-                if (!anchors.isEmpty()) graph.setExcessChoice(AutoBalancer.ChoiceKey.of(anchors));
+                if (!anchors.isEmpty()) graph.setExcessChoice(ChoiceKey.of(anchors));
             } catch (final RuntimeException ignored) {}
         }
         graph.setZoom(

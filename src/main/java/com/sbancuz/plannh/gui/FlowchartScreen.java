@@ -41,17 +41,19 @@ import com.cleanroommc.modularui.widgets.textfield.TextFieldWidget;
 import com.sbancuz.plannh.Config;
 import com.sbancuz.plannh.PlanNH;
 import com.sbancuz.plannh.api.PlanAPI;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer;
-import com.sbancuz.plannh.data.flowchart.BalanceView;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceMode;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
-import com.sbancuz.plannh.data.flowchart.Balancer.NodeBalance;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.flowchart.SlotSet;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
 import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer.NodeBalance;
+import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
+import com.sbancuz.plannh.data.flowchart.balancer.Note;
+import com.sbancuz.plannh.data.flowchart.balancer.Severity;
 import com.sbancuz.plannh.gui.components.CycleButton;
 import com.sbancuz.plannh.nei.NEIPlanConfig;
 
@@ -630,10 +632,10 @@ public class FlowchartScreen extends ModularScreen {
             if (br == wrappedFor) return;
             final List<MessageLine> lines = new ArrayList<>();
             final int wrapWidth = (int) ((WIDTH - ITEM_TEXT_X - 4) / NOTE_SCALE);
-            for (final String note : br.notes()) {
-                final int color = severityColor(AutoBalancer.Severity.of(note));
+            for (final Note note : br.notes()) {
+                final int color = severityColor(note.severity());
                 for (final Object line : Minecraft.getMinecraft().fontRenderer
-                    .listFormattedStringToWidth("- " + note, wrapWidth)) {
+                    .listFormattedStringToWidth("- " + note.render(), wrapWidth)) {
                     lines.add(new MessageLine((String) line, color));
                 }
             }
@@ -641,7 +643,7 @@ public class FlowchartScreen extends ModularScreen {
             wrappedMessages = List.copyOf(lines);
         }
 
-        private static int severityColor(final AutoBalancer.Severity severity) {
+        private static int severityColor(final Severity severity) {
             return switch (severity) {
                 case ERROR -> PlannhColors.ACCENT_RED.getColor();
                 case WARN -> PlannhColors.ACCENT_AMBER.getColor();
@@ -650,10 +652,10 @@ public class FlowchartScreen extends ModularScreen {
         }
 
         /** The loudest thing the solver said: an alarming bar over three asides cries wolf. */
-        private static AutoBalancer.Severity loudest(final BalanceResult br) {
-            AutoBalancer.Severity worst = AutoBalancer.Severity.INFO;
-            for (final String note : br.notes()) {
-                final AutoBalancer.Severity severity = AutoBalancer.Severity.of(note);
+        private static Severity loudest(final BalanceResult br) {
+            Severity worst = Severity.INFO;
+            for (final Note note : br.notes()) {
+                final Severity severity = note.severity();
                 if (severity.ordinal() < worst.ordinal()) worst = severity;
             }
             return worst;
@@ -733,15 +735,14 @@ public class FlowchartScreen extends ModularScreen {
 
             wrapNotes(br);
             if (!wrappedMessages.isEmpty()) {
-                final AutoBalancer.Severity worst = loudest(br);
+                final Severity worst = loudest(br);
                 ly = drawSectionHeader(
                     ly,
                     w,
                     SummarySection.MESSAGES,
                     "Solver Messages (" + br.notes()
                         .size() + ")",
-                    worst == AutoBalancer.Severity.INFO ? PlannhColors.SECTION_OPS.getColor()
-                        : PlannhColors.SECTION_WARN.getColor(),
+                    worst == Severity.INFO ? PlannhColors.SECTION_OPS.getColor() : PlannhColors.SECTION_WARN.getColor(),
                     severityColor(worst));
                 if (sectionOpen(SummarySection.MESSAGES)) {
                     for (final MessageLine line : wrappedMessages) {
@@ -818,7 +819,8 @@ public class FlowchartScreen extends ModularScreen {
             for (final BalanceView.Group group : alts.groups()) {
                 if (headings) {
                     GuiDraw.drawText(
-                        group.heading() + ":",
+                        group.heading()
+                            .render() + ":",
                         ITEM_TEXT_X,
                         ly,
                         NOTE_SCALE,
@@ -828,7 +830,9 @@ public class FlowchartScreen extends ModularScreen {
                 }
                 for (final BalanceView.Choice row : group.rows()) {
                     GuiDraw.drawText(
-                        (row.active() ? "> " : "  ") + (headings ? "  " : "") + row.label(),
+                        (row.active() ? "> " : "  ") + (headings ? "  " : "")
+                            + row.label()
+                                .render(),
                         ITEM_TEXT_X,
                         ly,
                         NOTE_SCALE,
@@ -966,7 +970,7 @@ public class FlowchartScreen extends ModularScreen {
                     .rows();
                 for (int i = 0; i < choiceRows.size() && i < options.size(); i++) {
                     if (my < choiceRows.get(i)[0] || my >= choiceRows.get(i)[1]) continue;
-                    final AutoBalancer.ChoiceKey picked = options.get(i)
+                    final ChoiceKey picked = options.get(i)
                         .key();
                     PlanAPI.recordEdit(g0, () -> g0.setExcessChoice(picked));
                     g0.markDirty();

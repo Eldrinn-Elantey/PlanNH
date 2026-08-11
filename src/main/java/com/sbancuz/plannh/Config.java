@@ -75,7 +75,7 @@ public final class Config {
      * later caller from assigning to it, and an unclamped percentage multiplies a 20-second budget.
      */
     public static int solverEffort() {
-        return Math.max(SOLVER_EFFORT_MIN, Math.min(SOLVER_EFFORT_MAX, solverEffortPercent));
+        return Math.clamp(solverEffortPercent, SOLVER_EFFORT_MIN, SOLVER_EFFORT_MAX);
     }
 
     public static void synchronizeConfiguration(final File configFile) {

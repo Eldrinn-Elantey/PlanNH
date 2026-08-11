@@ -8,7 +8,7 @@ import java.util.Map;
 
 import com.sbancuz.plannh.data.RecipeProperty;
 import com.sbancuz.plannh.data.RecipeResource;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
 
 public record Summary(List<Line<?>> outputs, List<Line<?>> inputs, List<Line<?>> properties) {
 

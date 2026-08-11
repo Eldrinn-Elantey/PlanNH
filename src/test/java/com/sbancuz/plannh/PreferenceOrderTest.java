@@ -8,16 +8,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
-import com.sbancuz.plannh.data.flowchart.AutoBalancer;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Alternative;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Rank;
 import com.sbancuz.plannh.data.flowchart.Graph;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternative;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternatives;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Rank;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 
 /**
@@ -30,7 +31,7 @@ class PreferenceOrderTest {
 
     @Test
     void theGraphHandsBackNodesAndEdgesInIdOrder() {
-        // FlowModel consumes both of these straight rather than sorting them, which is only correct
+        // The model consumes both of these straight rather than sorting them, which is only correct
         // while Graph keeps them sorted - and nothing in the solver would notice a HashMap creeping
         // back in until an answer moved.
         for (final String chart : List.of("mk1", "230_platline", "two_decisions")) {
@@ -68,11 +69,9 @@ class PreferenceOrderTest {
         reachable.add(Rank.DEFAULT);
         reachable.add(Rank.EQUALLY_VALID);
         for (final String chart : GtnhFlowLoader.CORPUS) {
-            for (final Alternative option : AutoBalancer.alternatives(
+            for (final Alternative option : alternatives(
                 GtnhFlowLoader.load(chart)
-                    .graph(),
-                Map.of())
-                .options()) {
+                    .graph()).options()) {
                 reachable.add(option.rank());
             }
         }
@@ -109,11 +108,9 @@ class PreferenceOrderTest {
 
     private static List<String> ranksOf(final String chart) {
         final List<String> ranks = new ArrayList<>();
-        for (final Alternative option : AutoBalancer.alternatives(
+        for (final Alternative option : alternatives(
             GtnhFlowLoader.load(chart)
-                .graph(),
-            Map.of())
-            .options()) {
+                .graph()).options()) {
             ranks.add(
                 option.rank()
                     .name());
@@ -125,11 +122,9 @@ class PreferenceOrderTest {
     void aRejectedAnswerIsExplainedByTheEarliestRuleThatSeparatesIt() {
         // mk1's alternative both imports and moves less material. Reporting the flow would name the
         // milder difference and hide the one that actually decided, which is settled first.
-        final List<Alternative> options = AutoBalancer.alternatives(
+        final List<Alternative> options = alternatives(
             GtnhFlowLoader.load("mk1")
-                .graph(),
-            Map.of())
-            .options();
+                .graph()).options();
 
         assertEquals(2, options.size());
         assertEquals(
@@ -152,11 +147,9 @@ class PreferenceOrderTest {
     @Test
     void noAnswerIsListedTwice() {
         for (final String chart : GtnhFlowLoader.CORPUS) {
-            final List<Alternative> options = AutoBalancer.alternatives(
+            final List<Alternative> options = alternatives(
                 GtnhFlowLoader.load(chart)
-                    .graph(),
-                Map.of())
-                .options();
+                    .graph()).options();
             final Set<String> seen = new HashSet<>();
             for (final Alternative option : options) {
                 assertTrue(
@@ -168,5 +161,9 @@ class PreferenceOrderTest {
                     .anyMatch(o -> o.rank() == null),
                 () -> chart + " produced an option with no rank");
         }
+    }
+
+    private static Alternatives alternatives(final Graph graph) {
+        return Balancer.alternatives(BalanceMode.AUTO, graph, false);
     }
 }

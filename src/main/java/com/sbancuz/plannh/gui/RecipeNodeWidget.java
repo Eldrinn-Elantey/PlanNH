@@ -27,11 +27,11 @@ import com.sbancuz.plannh.api.RecipePropertyAPI;
 import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.SettingDef;
-import com.sbancuz.plannh.data.flowchart.Balancer.BalanceResult;
-import com.sbancuz.plannh.data.flowchart.Balancer.NodeBalance;
 import com.sbancuz.plannh.data.flowchart.Group;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.flowchart.Port;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer;
 import com.sbancuz.plannh.layout.AutoLayout;
 import com.sbancuz.plannh.nei.NodeLookupContext;
 
@@ -217,7 +217,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
     }
 
     @Nullable
-    private NodeBalance getNodeBalance() {
+    private Balancer.NodeBalance getNodeBalance() {
         final BalanceResult br = canvas.getGraph()
             .balance();
         return br.nodeBalances()
@@ -362,7 +362,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
                 PlannhColors.TEXT_LIGHT.getColor(),
                 false);
 
-            final NodeBalance simpleNb = getNodeBalance();
+            final Balancer.NodeBalance simpleNb = getNodeBalance();
             final double simpleOps = simpleNb != null ? simpleNb.operations() : 1;
             final int simpleDurPerOp = simpleNb != null ? simpleNb.durationPerOp() : node.durationTicks;
             final StringBuilder simpleTiming = new StringBuilder();
@@ -477,7 +477,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         final int x = LEFT_CONTENT_X;
         int y = CONTENT_TOP + neiWidget.h + THROUGHPUT_GAP;
 
-        final NodeBalance nb = getNodeBalance();
+        final Balancer.NodeBalance nb = getNodeBalance();
         final float sec = nb != null && nb.totalDurationTicks() > 0
             ? (float) nb.totalDurationTicks() / GuiHelper.TICKS_PER_SECOND
             : node.durationTicks > 0 ? (float) node.durationTicks / GuiHelper.TICKS_PER_SECOND : 1f;
@@ -507,8 +507,8 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         drawPortList(x, y, node.outputs, nb, sec, true);
     }
 
-    private int drawPortList(final int x, int y, final List<Port<?>> ports, final NodeBalance nb, final float sec,
-        final boolean output) {
+    private int drawPortList(final int x, int y, final List<Port<?>> ports, final Balancer.NodeBalance nb,
+        final float sec, final boolean output) {
         for (int i = 0; i < ports.size(); i++) {
             final Port<?> port = ports.get(i);
             final String label = portLabel(port, i, nb, sec, output);
@@ -520,7 +520,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
     }
 
     @Nullable
-    private String portLabel(final Port<?> port, final int index, final NodeBalance nb, final float sec,
+    private String portLabel(final Port<?> port, final int index, final Balancer.NodeBalance nb, final float sec,
         final boolean output) {
         if (!hasVisibleAmount(port)) return null;
         // Both directions read the balance's effective totals so exact rates sit next to exact
@@ -535,7 +535,7 @@ public class RecipeNodeWidget extends Widget<RecipeNodeWidget>
         return label;
     }
 
-    private static float effectiveTotal(final NodeBalance nb, final int index, final boolean output,
+    private static float effectiveTotal(final Balancer.NodeBalance nb, final int index, final boolean output,
         final float fallbackPerOp) {
         final var effective = output ? nb.effectiveOutputs() : nb.effectiveInputs();
         final Float total = effective.get(index);

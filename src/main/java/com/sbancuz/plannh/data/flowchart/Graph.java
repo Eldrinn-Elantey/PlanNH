@@ -6,6 +6,13 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer;
+import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternatives;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -36,7 +43,7 @@ public class Graph {
     private boolean snapToGrid;
 
     @Getter
-    private Balancer.BalanceMode balanceMode = Balancer.BalanceMode.AUTO;
+    private BalanceMode balanceMode = BalanceMode.AUTO;
     @Getter
     private boolean opsMode;
 
@@ -46,9 +53,9 @@ public class Graph {
      * note rather than allowed to degrade it.
      */
     @Getter
-    private AutoBalancer.ChoiceKey excessChoice;
+    private ChoiceKey excessChoice;
 
-    private Balancer.BalanceResult balance = null;
+    private BalanceResult balance = null;
     private Summary summary = null;
     /**
      * The two display views, built on first ask after a solve rather than with it: the canvas wants
@@ -63,12 +70,12 @@ public class Graph {
         dirty = true;
     }
 
-    public void setExcessChoice(final AutoBalancer.ChoiceKey choice) {
+    public void setExcessChoice(final ChoiceKey choice) {
         excessChoice = choice;
         markDirty();
     }
 
-    public void setBalanceMode(final Balancer.BalanceMode mode) {
+    public void setBalanceMode(final BalanceMode mode) {
         balanceMode = mode;
         markDirty();
     }
@@ -85,7 +92,7 @@ public class Graph {
         markDirty();
     }
 
-    public Balancer.BalanceResult balance() {
+    public BalanceResult balance() {
         if (dirty) {
             balance = Balancer.balance(this, balanceMode, opsMode);
             summary = Summary.compute(balance, this, opsMode);
@@ -100,9 +107,10 @@ public class Graph {
      * Every answer that balances this chart as well as the one on screen. Produced by the same pass
      * that produced the balance, so asking costs nothing beyond the solve that already happened.
      */
-    public AutoBalancer.Alternatives alternatives() {
-        final AutoBalancer.Alternatives computed = balance().alternatives();
-        return computed == null ? new AutoBalancer.Alternatives(null, List.of(), true, List.of()) : computed;
+    public Alternatives alternatives() {
+        final BalanceResult balance = balance();
+        return balance instanceof final BalanceResult.Solved solved ? solved.alternatives()
+            : new Alternatives(null, List.of(), true, List.of());
     }
 
     public Summary summary() {

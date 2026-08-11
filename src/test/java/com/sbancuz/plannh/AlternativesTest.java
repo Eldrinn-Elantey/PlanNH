@@ -9,24 +9,27 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-import com.sbancuz.plannh.data.flowchart.AutoBalancer;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Alternative;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Alternatives;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.ChoiceKey;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Rank;
-import com.sbancuz.plannh.data.flowchart.AutoBalancer.Result;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Serializer;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer.Answer;
+import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
+import com.sbancuz.plannh.data.flowchart.balancer.SolverMessage;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternative;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternatives;
+import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Rank;
 import com.sbancuz.plannh.harness.GtnhFlowLoader;
 import com.sbancuz.plannh.harness.GtnhFlowLoader.LoadedChart;
 
 class AlternativesTest {
 
     private static Alternatives alternatives(final String chart) {
-        return AutoBalancer.alternatives(
+        return Balancer.alternatives(
+            BalanceMode.AUTO,
             GtnhFlowLoader.load(chart)
                 .graph(),
-            Map.of());
+            false);
     }
 
     @Test
@@ -91,8 +94,8 @@ class AlternativesTest {
 
     @Test
     void excessChoice_theRejectedOptionIsListedWithItsReason() {
-        // Voiding charcoal is not wrong, it just moves more material. The old solver picked it
-        // outright, so it must still be reachable rather than deleted.
+        // Voiding charcoal is not wrong, it just moves more material - a real answer somebody
+        // might want, so it must be listed rather than deleted.
         final Alternatives a = alternatives("excess_choice");
 
         assertEquals(
@@ -185,7 +188,9 @@ class AlternativesTest {
                 assertTrue(
                     a.notes()
                         .stream()
-                        .anyMatch(n -> n.contains("not tried") || n.contains("showing the closest")),
+                        .anyMatch(
+                            n -> n.message() == SolverMessage.STOPPED_EARLY
+                                || n.message() == SolverMessage.SHOWING_CLOSEST),
                     () -> chart + " truncated its list without saying so: " + a.notes());
             }
             // One current answer per decision, not one for the chart: a chart with three open
@@ -255,24 +260,19 @@ class AlternativesTest {
     @Test
     void aChosenAlternativeIsHonouredAndSurvivesTheSolve() {
         final LoadedChart chart = GtnhFlowLoader.load("symmetric_choice");
-        final Alternatives a = AutoBalancer.alternatives(chart.graph(), Map.of());
+        final Alternatives a = alternatives("symmetric_choice");
         final Alternative other = a.options()
             .get(1);
 
-        final Result picked = AutoBalancer.solve(chart.graph(), Map.of(), other.key());
-        assertTrue(picked.isSuccess(), () -> "solve failed: " + picked.failure());
-        assertEquals(
-            other.key(),
-            picked.solution()
-                .key(),
-            "the chart came back on the chosen support");
+        final Answer picked = Balancer
+            .solveWithAlternatives(BalanceMode.AUTO, chart.graph(), false, other.key(), Map.of());
+        final Answer.Solved solved = solved(picked);
+        assertEquals(other.key(), solved.solution().key, "the chart came back on the chosen support");
         assertEquals(
             other.externals()
                 .get(0)
                 .port(),
-            picked.solution()
-                .gatedSinks()
-                .get(0)
+            solved.solution().gatedSinks.get(0)
                 .port(),
             "surplus leaves where the user asked");
     }
@@ -280,10 +280,12 @@ class AlternativesTest {
     @Test
     void aChoiceSurvivesEncodeAndDecode() {
         final LoadedChart chart = GtnhFlowLoader.load("symmetric_choice");
-        final Alternatives a = AutoBalancer.alternatives(chart.graph(), Map.of());
+        final Alternatives a = alternatives("symmetric_choice");
         final ChoiceKey picked = a.options()
             .get(1)
             .key();
+        // Graph speaks the balancer package's ChoiceKey directly: gate anchors are ports, not gate
+        // indices, so the key itself survives a save with nothing in it a rebuild could invalidate.
         chart.graph()
             .setExcessChoice(picked);
 
@@ -298,26 +300,28 @@ class AlternativesTest {
     @Test
     void aChoiceThatNoLongerFitsFallsBackWithANote() {
         final LoadedChart chart = GtnhFlowLoader.load("symmetric_choice");
-        final Alternatives a = AutoBalancer.alternatives(chart.graph(), Map.of());
+        final Alternatives a = alternatives("symmetric_choice");
         // A key from a different chart names ports this one does not have.
-        final Alternatives other = AutoBalancer.alternatives(
-            GtnhFlowLoader.load("mk1")
-                .graph(),
-            Map.of());
+        final Alternatives other = alternatives("mk1");
 
-        final Result r = AutoBalancer.solve(chart.graph(), Map.of(), other.chosen());
-        assertTrue(r.isSuccess(), () -> "a stale choice must never fail the solve: " + r.failure());
-        assertEquals(
-            a.chosen(),
-            r.solution()
-                .key(),
-            "fell back to the solver's own answer");
+        final Answer r = Balancer
+            .solveWithAlternatives(BalanceMode.AUTO, chart.graph(), false, other.chosen(), Map.of());
+        final Answer.Solved solved = solved(r);
+        assertEquals(a.chosen(), solved.solution().key, "fell back to the solver's own answer");
         assertTrue(
-            r.solution()
-                .notes()
-                .stream()
-                .anyMatch(n -> n.contains("saved excess choice")),
-            () -> "and said so: " + r.solution()
-                .notes());
+            solved.solution().notes.stream()
+                .anyMatch(
+                    n -> n.message() == SolverMessage.CHOICE_NO_LONGER_FITS
+                        || n.message() == SolverMessage.CHOICE_NEEDS_MORE_GATES),
+            () -> "and said so: " + solved.solution().notes);
+    }
+
+    private static Answer.Solved solved(final Answer answer) {
+        if (answer instanceof final Answer.Solved solved) return solved;
+        throw new AssertionError("solve failed: " + describe(answer));
+    }
+
+    private static String describe(final Answer answer) {
+        return answer instanceof final Answer.Failed failed ? failed.failure().describe() : answer.toString();
     }
 }
