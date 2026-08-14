@@ -14,6 +14,7 @@ public class MachineConfig {
 
     public String profileId;
     public final Map<String, Object> settings = new HashMap<>();
+    // todo make these functional
     public final Map<Integer, Float> inputConsumption = new HashMap<>();
     public final Map<Integer, Float> outputProductivity = new HashMap<>();
 
