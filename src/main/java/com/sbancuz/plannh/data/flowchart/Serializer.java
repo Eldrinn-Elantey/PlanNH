@@ -111,6 +111,28 @@ public final class Serializer {
     }
 
     /**
+     * Encodes a Plan (with all its graphs) to a JSON string. Graph bodies are stored compressed,
+     * each with its slot name and summary section folds.
+     */
+    @Nonnull
+    public static String encodePlanDebug(final Plan plan) {
+        final JsonObject root = GSON.toJsonTree(plan, Plan.class)
+            .getAsJsonObject();
+
+        final JsonArray arr = new JsonArray();
+        for (final Graph graph : plan.getGraphs()) {
+            final JsonObject slotObj = new JsonObject();
+            slotObj.addProperty("name", graph.getName());
+            slotObj.add("data", graphToJson(graph));
+            slotObj.add("sectionFolds", foldsToJson(graph.collapsedSummarySections));
+            arr.add(slotObj);
+        }
+        root.add("graphs", arr);
+
+        return GSON.toJson(root);
+    }
+
+    /**
      * Decodes a Plan (with all its graphs) from a JSON string.
      */
     @Nonnull

@@ -154,10 +154,15 @@ public final class PlanAPI {
 
     public static void save() {
         try {
-            final File saveFile = getSaveFile();
+            File saveFile = getSaveFile();
             saveFile.getParentFile()
                 .mkdirs();
             Files.writeString(saveFile.toPath(), Serializer.encodePlan(Plan.getInstance()), StandardCharsets.UTF_8);
+
+            saveFile = getDebugSaveFile();
+            saveFile.getParentFile()
+                .mkdirs();
+            Files.writeString(saveFile.toPath(), Serializer.encodePlanDebug(Plan.getInstance()), StandardCharsets.UTF_8);
         } catch (final Exception ignored) {}
     }
 
@@ -168,5 +173,14 @@ public final class PlanAPI {
             return new File(mc.mcDataDir, "saves/NEI/" + worldName + "/plannh/plannh.dat");
         }
         return new File(mc.mcDataDir, "plannh/plannh.dat");
+    }
+
+    public static File getDebugSaveFile() {
+        final Minecraft mc = Minecraft.getMinecraft();
+        final String worldName = NEIClientConfig.getWorldPath();
+        if (worldName != null && !worldName.isEmpty()) {
+            return new File(mc.mcDataDir, "saves/NEI/" + worldName + "/plannh/plannh_debug.json");
+        }
+        return new File(mc.mcDataDir, "plannh/plannh_debug.json");
     }
 }
