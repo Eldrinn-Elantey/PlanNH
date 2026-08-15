@@ -162,7 +162,8 @@ public final class PlanAPI {
             saveFile = getDebugSaveFile();
             saveFile.getParentFile()
                 .mkdirs();
-            Files.writeString(saveFile.toPath(), Serializer.encodePlanDebug(Plan.getInstance()), StandardCharsets.UTF_8);
+            Files
+                .writeString(saveFile.toPath(), Serializer.encodePlanDebug(Plan.getInstance()), StandardCharsets.UTF_8);
         } catch (final Exception ignored) {}
     }
 

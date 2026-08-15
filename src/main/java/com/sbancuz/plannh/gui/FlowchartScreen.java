@@ -30,10 +30,12 @@ import com.cleanroommc.modularui.theme.WidgetThemeEntry;
 import com.cleanroommc.modularui.utils.Alignment;
 import com.cleanroommc.modularui.utils.Color;
 import com.cleanroommc.modularui.value.DoubleValue;
+import com.cleanroommc.modularui.value.EnumValue;
 import com.cleanroommc.modularui.value.StringValue;
 import com.cleanroommc.modularui.widget.Widget;
 import com.cleanroommc.modularui.widget.sizer.Area;
 import com.cleanroommc.modularui.widgets.ButtonWidget;
+import com.cleanroommc.modularui.widgets.CycleButtonWidget;
 import com.cleanroommc.modularui.widgets.ListWidget;
 import com.cleanroommc.modularui.widgets.layout.Flow;
 import com.cleanroommc.modularui.widgets.menu.Menu;
@@ -54,7 +56,6 @@ import com.sbancuz.plannh.data.flowchart.balancer.Balancer.NodeBalance;
 import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
 import com.sbancuz.plannh.data.flowchart.balancer.Note;
 import com.sbancuz.plannh.data.flowchart.balancer.Severity;
-import com.sbancuz.plannh.gui.components.CycleButton;
 import com.sbancuz.plannh.nei.NEIPlanConfig;
 
 import codechicken.nei.LayoutManager;
@@ -246,16 +247,6 @@ public class FlowchartScreen extends ModularScreen {
                                     return true;
                                 }))
                         .child(
-                            new CycleButton<>(BalanceMode.class).overlay(v -> IKey.str(CycleButton.shortName(v)))
-                                .source(
-                                    () -> canvas.getGraph()
-                                        .getBalanceMode())
-                                .onCycle(next -> {
-                                    canvas.getGraph()
-                                        .setBalanceMode(next);
-                                    PlanAPI.save();
-                                }))
-                        .child(
                             new ButtonWidget<>().overlay(IKey.str("Ops"))
                                 .onMousePressed(_ -> {
                                     final Graph g = canvas.getGraph();
@@ -267,15 +258,31 @@ public class FlowchartScreen extends ModularScreen {
                                     return true;
                                 }))
                         .child(
-                            new CycleButton<>(SummaryMode.class).overlay(v -> IKey.str(CycleButton.shortName(v)))
-                                .current(
-                                    Plan.getInstance()
-                                        .getSummaryMode())
-                                .onCycle(next -> {
-                                    Plan.getInstance()
-                                        .setSummaryMode(next);
-                                    PlanAPI.save();
-                                }))
+                            new CycleButtonWidget()
+                                .value(
+                                    new EnumValue.Dynamic<>(
+                                        BalanceMode.class,
+                                        () -> Plan.getActiveGraph()
+                                            .getBalanceMode(),
+                                        val -> Plan.getActiveGraph()
+                                            .setBalanceMode(val)))
+                                .stateOverlay(BalanceMode.NONE, IKey.str("M:-"))
+                                .stateOverlay(BalanceMode.INPUT, IKey.str("M:F"))
+                                .stateOverlay(BalanceMode.OUTPUT, IKey.str("M:B"))
+                                .stateOverlay(BalanceMode.AUTO, IKey.str("M:A"))
+                                .addTooltipLine("Cycle Balance Modes"))
+                        .child(
+                            new CycleButtonWidget()
+                                .value(
+                                    new EnumValue.Dynamic<>(
+                                        SummaryMode.class,
+                                        () -> Plan.getInstance()
+                                            .getSummaryMode(),
+                                        val -> Plan.getInstance()
+                                            .setSummaryMode(val)))
+                                .stateOverlay(SummaryMode.CYCLES, IKey.str("S:C"))
+                                .stateOverlay(SummaryMode.THROUGHPUT, IKey.str("S:T"))
+                                .addTooltipLine("Cycle Summary Modes"))
                         .child(new ButtonWidget<>().onMousePressed(_ -> {
                             canvas.addGroup(canvas.getCanvasScreenCenterX(), canvas.getCanvasScreenCenterY());
                             return true;
