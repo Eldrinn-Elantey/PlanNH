@@ -46,8 +46,6 @@ public class Graph {
 
     @Getter
     private BalanceMode balanceMode = BalanceMode.AUTO;
-    @Getter
-    private boolean opsMode;
 
     /**
      * Per-graph undo/redo stack, transient because snapshots are content-encoded and never stored.
@@ -124,11 +122,6 @@ public class Graph {
 
     public void setBalanceMode(final BalanceMode mode) {
         balanceMode = mode;
-        bumpVersion();
-    }
-
-    public void setOpsMode(final boolean opsMode) {
-        this.opsMode = opsMode;
         bumpVersion();
     }
 

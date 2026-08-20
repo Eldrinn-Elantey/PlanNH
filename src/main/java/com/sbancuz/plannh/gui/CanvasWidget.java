@@ -276,7 +276,6 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         restored.setPanY(graph.getPanY());
         restored.setSnapToGrid(graph.isSnapToGrid());
         restored.setBalanceMode(graph.getBalanceMode());
-        restored.setOpsMode(graph.isOpsMode());
         final Plan plan = Plan.getInstance();
         plan.getGraphs()
             .set(plan.getActiveIndex(), restored);

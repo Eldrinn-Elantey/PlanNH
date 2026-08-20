@@ -245,9 +245,9 @@ public final class Summary extends GraphData {
         .build();
 
     /**
-     * Re-derive this summary's lines from a fresh balance. In ops mode effective amounts are
-     * per-operation totals (no duration scaling needed); otherwise every node's throughput is scaled
-     * up to the longest recipe on the chart so one cycle's rates are comparable.
+     * Re-derive this summary's lines from a fresh balance: every node's throughput is scaled up to
+     * the longest recipe on the chart (one cycle's rates) or to a per-second rate, per the panel's
+     * {@link Mode}.
      */
     public Summary recompute(final Graph graph) {
         final Mode mode = Plan.getInstance()
@@ -255,14 +255,13 @@ public final class Summary extends GraphData {
         if (atVersion >= graph.version() && atMode == mode) return this;
         atMode = mode;
 
-        final boolean opsMode = graph.isOpsMode();
-        this.balance = Balancer.balance(graph, graph.getBalanceMode(), opsMode);
+        this.balance = Balancer.balance(graph, graph.getBalanceMode());
 
         final Map<LineKey, Float> outputs = new HashMap<>();
         final Map<LineKey, Float> inputs = new HashMap<>();
         final Map<LineKey, Float> properties = new HashMap<>();
 
-        final int cycleTicks = opsMode ? 1 : cycleTicks(balance, graph);
+        final int cycleTicks = cycleTicks(balance, graph);
 
         // Accumulate scaled flows per resource across all ports, connected and unconnected alike.
         for (final Node node : graph.getNodes()) {
@@ -270,14 +269,9 @@ public final class Summary extends GraphData {
                 .get(node.id);
             if (nb == null) continue;
 
-            final float scale;
-            if (opsMode) {
-                scale = 1f;
-            } else if (mode == Mode.THROUGHPUT) {
-                scale = (float) GuiHelper.TICKS_PER_SECOND / Math.max(1, nb.durationPerOp());
-            } else {
-                scale = (float) cycleTicks / Math.max(1, nb.durationPerOp());
-            }
+            final float scale = mode == Mode.THROUGHPUT
+                ? (float) GuiHelper.TICKS_PER_SECOND / Math.max(1, nb.durationPerOp())
+                : (float) cycleTicks / Math.max(1, nb.durationPerOp());
             accumulate(node.outputs, nb.effectiveOutputs(), scale, outputs);
             accumulate(node.inputs, nb.effectiveInputs(), scale, inputs);
         }

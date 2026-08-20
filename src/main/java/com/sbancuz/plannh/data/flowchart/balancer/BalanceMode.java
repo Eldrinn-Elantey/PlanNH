@@ -69,14 +69,6 @@ public enum BalanceMode {
         this.supportsAlternatives = supportsAlternatives;
     }
 
-    /**
-     * AUTO reports exact per-second rates and ignores opsMode: the summary would rescale to
-     * per-cycle totals and net recycled ingredients into phantom lines.
-     */
-    public boolean usesOpsMode() {
-        return this == OUTPUT || this == INPUT;
-    }
-
     public String displayName() {
         return StatCollector.translateToLocal(
             "plannh.gui.balancer_mode." + this.name()

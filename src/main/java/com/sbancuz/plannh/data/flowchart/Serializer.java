@@ -215,7 +215,6 @@ public final class Serializer {
             "balanceMode",
             graph.getBalanceMode()
                 .name());
-        root.addProperty("opsMode", graph.isOpsMode());
         // The chosen answer travels as the ports it opens, never as gate indices: those are rebuilt
         // from scratch on every solve and mean nothing across a save.
         if (graph.getExcessChoice() != null) {
@@ -315,11 +314,6 @@ public final class Serializer {
                         root.get("balanceMode")
                             .getAsString()));
             } catch (final IllegalArgumentException ignored) {}
-        }
-        if (root.has("opsMode")) {
-            graph.setOpsMode(
-                root.get("opsMode")
-                    .getAsBoolean());
         }
         // Read independently of everything else, like the per-node targets: an old save has no such
         // key, and a corrupt one costs the user a preference rather than the chart.

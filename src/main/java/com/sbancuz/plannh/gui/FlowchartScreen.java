@@ -224,17 +224,6 @@ public class FlowchartScreen extends ModularScreen {
                                     return true;
                                 }))
                         .child(
-                            new ButtonWidget<>().overlay(IKey.str("Ops"))
-                                .onMousePressed(_ -> {
-                                    final Graph g = canvas.getGraph();
-                                    if (g.getBalanceMode()
-                                        .usesOpsMode()) {
-                                        g.setOpsMode(!g.isOpsMode());
-                                        PlanAPI.save();
-                                    }
-                                    return true;
-                                }))
-                        .child(
                             new CycleButtonWidget()
                                 .value(
                                     new EnumValue.Dynamic<>(
