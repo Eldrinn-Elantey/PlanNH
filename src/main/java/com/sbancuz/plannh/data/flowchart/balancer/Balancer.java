@@ -150,8 +150,8 @@ public final class Balancer {
         }
         final Settlement settlement = mode.chain()
             .run(ctx);
-        if (settlement instanceof Settlement.Stalled(Note reason)) {
-            return new Answer.Failed(reason);
+        if (settlement instanceof final Settlement.Stalled stalled) {
+            return new Answer.Failed(stalled.reason());
         }
         if (ctx.point() == null) {
             return new Answer.Failed(SolverMessage.BALANCE_FAILED.toNote(ctx.rejection));
@@ -199,7 +199,8 @@ public final class Balancer {
         // One pass produces both the chart and the answers it could have had: the panel shows the
         // alternatives unconditionally now, and re-deriving them would mean solving twice per edit.
         final Answer answer = solveWithAlternatives(mode, graph, opsMode, graph.getExcessChoice(), Map.of());
-        if (answer instanceof Answer.Failed(Note reason)) {
+        if (answer instanceof final Answer.Failed failed) {
+            final Note reason = failed.failure();
             if (reason != null && reason.message() == SolverMessage.NO_PIN) {
                 // Expected state, not an error: an unpinned chart is just wiring, so it gets no
                 // quantities at all rather than numbers derived from an anchor nobody set.

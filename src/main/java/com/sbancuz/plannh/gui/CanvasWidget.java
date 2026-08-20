@@ -47,6 +47,7 @@ import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Port;
 import com.sbancuz.plannh.data.flowchart.UndoHistory;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
+import com.sbancuz.plannh.gui.summary.SummaryWidget;
 import com.sbancuz.plannh.layout.AutoLayout;
 import com.sbancuz.plannh.nei.NEIPlanConfig;
 import com.sbancuz.plannh.nei.NodeLookupContext;
@@ -171,6 +172,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         rebuildGroupWidgets();
         rebuildNodeWidgets();
 
+        child(new SummaryWidget(this, graph.summary()));
         background(new DynamicDrawable(() -> new Rectangle().color(getBackgroundColor())));
     }
 
@@ -237,6 +239,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         flowchartWidgets.clear();
         rebuildGroupWidgets();
         rebuildNodeWidgets();
+        child(new SummaryWidget(this, graph.summary()));
     }
 
     /** One entry point, not three: removeAll() drops every child, so a partial rebuild loses the rest. */
@@ -246,6 +249,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         flowchartWidgets.clear();
         rebuildGroupWidgets();
         rebuildNodeWidgets();
+        child(new SummaryWidget(this, graph.summary()));
     }
 
     public void undoGraph() {

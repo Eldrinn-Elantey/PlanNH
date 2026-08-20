@@ -9,7 +9,6 @@ import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 import com.sbancuz.plannh.api.PlanAPI;
-import com.sbancuz.plannh.data.flowchart.Summary.SummaryMode;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -18,18 +17,12 @@ import lombok.Setter;
 @Setter
 public class Plan {
 
-    private static final int DEFAULT_SUMMARY_X = 210;
-    private static final int DEFAULT_SUMMARY_Y = 46;
-
     @Nullable
     private static Plan INSTANCE;
 
     private transient final List<Graph> graphs = new ArrayList<>();
     private int activeIndex = 0;
-    private int summaryX = DEFAULT_SUMMARY_X;
-    private int summaryY = DEFAULT_SUMMARY_Y;
-    private boolean summaryCollapsed = false;
-    private SummaryMode summaryMode = SummaryMode.CYCLES;
+    private Summary.Mode mode = Summary.Mode.CYCLES;
     private boolean snapToGrid;
 
     private Plan() {}
