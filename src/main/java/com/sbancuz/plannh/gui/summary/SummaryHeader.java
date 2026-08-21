@@ -40,6 +40,7 @@ class SummaryHeader extends ParentWidget<SummaryHeader> {
                 .child(
                     FlowchartFlow.row(panel)
                         .coverChildren()
+                        .childPadding(4)
                         .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                         .child(accentStrip(accent))
                         .child(new TextWidget<>(headerTitle(section, data)).color(titleTextColor)))
@@ -48,7 +49,6 @@ class SummaryHeader extends ParentWidget<SummaryHeader> {
         child(
             new Widget<>().fullWidth()
                 .height(1)
-                .bottom(0)
                 .background(new Rectangle().color(PlannhColors.SUMMARY_SEPARATOR.getColor())));
 
         if (section == Summary.Section.CHOICES) {
