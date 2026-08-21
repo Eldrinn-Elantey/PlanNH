@@ -12,6 +12,8 @@ import com.sbancuz.plannh.gui.FlowchartWidget;
  */
 class SummarySection extends ParentWidget<SummarySection> {
 
+    private static final int INNER_GAP = 3;
+
     private final Summary data;
 
     SummarySection(final FlowchartWidget<?, ?> panel, final Summary.Section section, final int accent,
@@ -25,7 +27,7 @@ class SummarySection extends ParentWidget<SummarySection> {
             FlowchartFlow.col(panel)
                 .fullWidth()
                 .coverChildrenHeight()
-                .childPadding(3)
+                .childPadding(INNER_GAP)
                 .collapseDisabledChild()
                 .child(new SummaryHeader(panel, data, section, accent, titleTextColor))
                 .child(

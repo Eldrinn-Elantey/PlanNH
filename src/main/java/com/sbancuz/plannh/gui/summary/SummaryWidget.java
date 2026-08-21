@@ -26,11 +26,15 @@ import com.sbancuz.plannh.gui.PlannhColors;
 public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
 
     private static final int WIDTH = 200;
-    private static final int TITLE_H = SummaryHeader.HEADER_H;
-    private static final int SECTION_PADDING = 4;
+    private static final int PADDING = 4;
+    private static final int CORNER_RADIUS = 2;
+    private static final int SECTION_GAP = 4;
+    private static final int TITLE_INSET_X = 4;
+    private static final int BUTTON_GAP = 2;
+    private static final int SCROLLBAR_GAP = 4;
     private static final int SCREEN_MARGIN = 10;
-    private static final int PANEL_CHROME = TITLE_H + 1 + SECTION_PADDING * 4 + SCREEN_MARGIN;
     private static final int MIN_VIEWPORT_H = 45;
+    private static final int PANEL_CHROME = SummaryHeader.HEADER_H + 1 + SECTION_GAP * 4 + SCREEN_MARGIN;
 
     public SummaryWidget(final CanvasWidget canvas, final Summary data) {
         super(canvas, data);
@@ -40,22 +44,22 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
         child(
             FlowchartFlow.col(this)
                 .width(WIDTH)
-                .padding(4)
-                .childPadding(SECTION_PADDING)
+                .padding(PADDING)
+                .childPadding(SECTION_GAP)
                 .coverChildrenHeight()
                 .crossAxisAlignment(Alignment.CrossAxis.START)
                 .collapseDisabledChild()
                 .background(
                     new Rectangle().color(PlannhColors.SUMMARY_BG.getColor()),
-                    new Rectangle().cornerRadius(2)
+                    new Rectangle().cornerRadius(CORNER_RADIUS)
                         .hollow(1)
                         .color(PlannhColors.SUMMARY_BORDER.getColor()))
                 .child(
                     FlowchartFlow.row(this)
                         .fullWidth()
-                        .height(TITLE_H)
-                        .padding(4, 0, 0, 0)
-                        .childPadding(4)
+                        .height(SummaryHeader.HEADER_H)
+                        .paddingLeft(TITLE_INSET_X)
+                        .childPadding(PADDING)
                         .mainAxisAlignment(Alignment.MainAxis.SPACE_BETWEEN)
                         .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                         .background(new Rectangle().color(PlannhColors.SUMMARY_TITLE_BG.getColor()))
@@ -65,7 +69,7 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
                         .child(
                             FlowchartFlow.row(this)
                                 .coverChildren()
-                                .childPadding(2)
+                                .childPadding(BUTTON_GAP)
                                 .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                                 .child(modeToggle(this, data))
                                 .child(SummaryHeader.foldToggle(data, Summary.Section.ALL))))
@@ -75,7 +79,7 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
                         .background(new Rectangle().color(PlannhColors.SUMMARY_TITLE_LINE.getColor())))
                 .child(
                     new FlowchartList().fullWidth()
-                        .paddingRight(4)
+                        .paddingRight(SCROLLBAR_GAP)
                         .crossAxisAlignment(Alignment.CrossAxis.START)
                         .scrollDirection(new VerticalScrollData())
                         .setEnabledIf(_ -> !data.isSummaryFold(Summary.Section.ALL))
@@ -94,12 +98,12 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
     }
 
     private SummarySection sec(final Summary.Section section, final ColorResource accent, final ColorResource text) {
-        return new SummarySection(this, section, accent.getColor(), text.getColor()).marginBottom(SECTION_PADDING);
+        return new SummarySection(this, section, accent.getColor(), text.getColor()).marginBottom(SECTION_GAP);
     }
 
     private static CycleButtonWidget modeToggle(final FlowchartWidget<?, ?> panel, final Summary data) {
         final Plan plan = Plan.getInstance();
-        return new CycleButtonWidget().size(TITLE_H, TITLE_H)
+        return new CycleButtonWidget().size(SummaryHeader.HEADER_H, SummaryHeader.HEADER_H)
             .tooltipStatic(
                 t -> t.addLine(IKey.lang("plannh.summary.mode.title"))
                     .addLine(IKey.lang("plannh.summary.mode.switch_hint")))

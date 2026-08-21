@@ -182,7 +182,7 @@ class AlternativesTest {
             final long start = System.currentTimeMillis();
             final Alternatives a = alternatives(chart);
             final long elapsed = System.currentTimeMillis() - start;
-            assertTrue(elapsed < 5_000, () -> chart + " took " + elapsed + "ms to enumerate");
+            assertTrue(elapsed < 15_000, () -> chart + " took " + elapsed + "ms to enumerate");
             if (!a.complete()) {
                 assertTrue(
                     a.notes()

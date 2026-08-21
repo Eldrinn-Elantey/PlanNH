@@ -23,6 +23,7 @@ import com.sbancuz.plannh.gui.PlannhColors;
 class SummaryHeader extends ParentWidget<SummaryHeader> {
 
     public static final int HEADER_H = 18;
+    private static final int PAD = 4;
     private static final int ACCENT_W = 3;
 
     protected SummaryHeader(final FlowchartWidget<?, ?> panel, final Summary data, final Summary.Section section,
@@ -34,13 +35,13 @@ class SummaryHeader extends ParentWidget<SummaryHeader> {
             FlowchartFlow.row(panel)
                 .fullWidth()
                 .fullHeight()
-                .childPadding(4)
+                .childPadding(PAD)
                 .mainAxisAlignment(Alignment.MainAxis.SPACE_BETWEEN)
                 .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                 .child(
                     FlowchartFlow.row(panel)
                         .coverChildren()
-                        .childPadding(4)
+                        .childPadding(PAD)
                         .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                         .child(accentStrip(accent))
                         .child(new TextWidget<>(headerTitle(section, data)).color(titleTextColor)))
