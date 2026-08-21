@@ -90,7 +90,8 @@ public class Graph {
 
     /**
      * @deprecated Mutations bump the graph version internally; callers that change solve-relevant
-     *             state should route through the graph's own methods instead.
+     *             state should route through the graph's own methods instead. This is closely related to the maps at
+     *             the beginning which should have proper accessors
      */
     @Deprecated
     public void markDirty() {
