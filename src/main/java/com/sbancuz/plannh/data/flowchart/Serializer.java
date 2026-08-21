@@ -5,7 +5,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -26,8 +25,6 @@ import com.sbancuz.plannh.data.MachineProfile;
 import com.sbancuz.plannh.data.MachineProfileRegistry;
 import com.sbancuz.plannh.data.SettingDef;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
-import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
-import com.sbancuz.plannh.data.flowchart.balancer.PortRef;
 
 import codechicken.nei.recipe.Recipe;
 
@@ -115,7 +112,6 @@ public final class Serializer {
             slotObj.addProperty("name", graph.getName());
             if (debug) slotObj.add("data", graphToJson(graph));
             else slotObj.addProperty("data", encode(graph));
-            slotObj.addProperty("sectionFolds", graph.summaryFolds());
             arr.add(slotObj);
         }
         root.add("graphs", arr);
@@ -149,11 +145,6 @@ public final class Serializer {
                     graph = new Graph(name);
                 }
                 graph.setName(name);
-                if (obj.has("sectionFolds")) {
-                    graph.setSummaryFolds(
-                        obj.get("sectionFolds")
-                            .getAsInt());
-                }
                 plan.getGraphs()
                     .add(graph);
             }
@@ -215,23 +206,6 @@ public final class Serializer {
             "balanceMode",
             graph.getBalanceMode()
                 .name());
-        // The chosen answer travels as the ports it opens, never as gate indices: those are rebuilt
-        // from scratch on every solve and mean nothing across a save.
-        if (graph.getExcessChoice() != null) {
-            final JsonArray anchors = new JsonArray();
-            for (final PortRef ref : graph.getExcessChoice()
-                .gateAnchors()) {
-                final JsonObject a = new JsonObject();
-                a.addProperty(
-                    "node",
-                    ref.nodeId()
-                        .toString());
-                a.addProperty("port", ref.portIndex());
-                a.addProperty("input", ref.input());
-                anchors.add(a);
-            }
-            root.add("excessChoice", anchors);
-        }
         root.addProperty("zoom", graph.getZoom());
         root.addProperty("panX", graph.getPanX());
         root.addProperty("panY", graph.getPanY());
@@ -296,7 +270,8 @@ public final class Serializer {
 
         // The summary rides the chart it belongs to. GSON's registered adapters draw and read it
         // like every other GraphData, so the position survives a reload without a plan-level copy.
-        root.add("summary", GSON.toJsonTree(graph.summary()));
+        // Raw access, never graph.summary(): deriving here would re-enter the plan load in progress.
+        root.add("summary", GSON.toJsonTree(graph.getSummary()));
 
         return root;
     }
@@ -315,26 +290,6 @@ public final class Serializer {
                             .getAsString()));
             } catch (final IllegalArgumentException ignored) {}
         }
-        // Read independently of everything else, like the per-node targets: an old save has no such
-        // key, and a corrupt one costs the user a preference rather than the chart.
-        if (root.has("excessChoice")) {
-            try {
-                final List<PortRef> anchors = new ArrayList<>();
-                for (final JsonElement elem : root.getAsJsonArray("excessChoice")) {
-                    final JsonObject a = elem.getAsJsonObject();
-                    anchors.add(
-                        new PortRef(
-                            UUID.fromString(
-                                a.get("node")
-                                    .getAsString()),
-                            a.get("port")
-                                .getAsInt(),
-                            a.get("input")
-                                .getAsBoolean()));
-                }
-                if (!anchors.isEmpty()) graph.setExcessChoice(ChoiceKey.of(anchors));
-            } catch (final RuntimeException ignored) {}
-        }
         graph.setZoom(
             root.get("zoom")
                 .getAsFloat());
@@ -344,15 +299,10 @@ public final class Serializer {
         graph.setPanY(
             root.get("panY")
                 .getAsFloat());
-        // A chart saved before the summary rode the graph body has no "summary" node; the graph's
-        // Summary keeps its default position, which the widget is happy with. It decodes through
-        // the same GraphData adapter as the notes and groups, keyed by the "type" field.
+
         if (root.has("summary")) {
             final Summary saved = (Summary) GSON.fromJson(root.get("summary"), GraphData.class);
-            graph.summary()
-                .setX(saved.getX());
-            graph.summary()
-                .setY(saved.getY());
+            graph.setSummary(saved);
         }
 
         final JsonArray nodesArray = root.getAsJsonArray("nodes");

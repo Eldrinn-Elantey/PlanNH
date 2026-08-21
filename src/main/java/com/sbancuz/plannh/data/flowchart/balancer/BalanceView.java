@@ -2,10 +2,14 @@ package com.sbancuz.plannh.data.flowchart.balancer;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import com.sbancuz.plannh.data.MachineConfig;
+import com.sbancuz.plannh.data.flowchart.Edge;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.flowchart.Port;
@@ -60,7 +64,7 @@ public final class BalanceView {
      */
     public static List<Boundary> boundary(final Graph graph) {
         final BalanceResult balance = graph.balance();
-        if (!(balance instanceof final BalanceResult.Solved solved)) return List.of();
+        if (!(balance instanceof final BalanceResult.Solved solved)) return configuredBoundary(graph);
         final SolutionView auto = solved.auto();
         final List<Boundary> out = new ArrayList<>();
         collect(graph, auto.gatedSinks, Kind.EXCESS, SolverMessage.BOUNDARY_EXCESS, out);
@@ -68,6 +72,58 @@ public final class BalanceView {
         collect(graph, auto.terminalOutputs, Kind.PRODUCT, SolverMessage.BOUNDARY_FLOW, out);
         collect(graph, auto.terminalInputs, Kind.SUPPLY, SolverMessage.BOUNDARY_FLOW, out);
         return List.copyOf(out);
+    }
+
+    /**
+     * The no-solve image of the boundary: every unwired port drawn at the rate its configured
+     * machine count implies. NONE mode and a stalled solve have no answer to read, but the chart
+     * still says what it runs on and what it makes - an empty canvas reads as "nothing crosses
+     * the boundary", which is a claim about the solver, not about the chart. Gated flows (excess,
+     * imports) need a solve and are simply absent here.
+     */
+    private static List<Boundary> configuredBoundary(final Graph graph) {
+        final Set<PortRef> wired = new HashSet<>();
+        for (final Edge edge : graph.getEdges()) {
+            wired.add(new PortRef(edge.sourceNodeId, edge.sourceOutputIndex, false));
+            wired.add(new PortRef(edge.targetNodeId, edge.targetInputIndex, true));
+        }
+        final List<Boundary> out = new ArrayList<>();
+        for (final Node node : graph.getNodes()) {
+            collectConfigured(node, wired, false, out);
+            collectConfigured(node, wired, true, out);
+        }
+        return List.copyOf(out);
+    }
+
+    /** One {@link Boundary} per unwired port of {@code node}, rated by its configured count. */
+    private static void collectConfigured(final Node node, final Set<PortRef> wired, final boolean input,
+        final List<Boundary> out) {
+        final MachineConfig cfg = node.machineConfig;
+        final double count = cfg.getMachineCount();
+        if (count <= 0) return;
+        final var eff = cfg.computeEffect(node.properties);
+        final int durTicks = Math.max(1, eff.durationTicks());
+        final int tf = eff.throughputFactor();
+        final List<Port<?>> ports = input ? node.inputs : node.outputs;
+        for (int i = 0; i < ports.size(); i++) {
+            final Port<?> port = ports.get(i);
+            if (wired.contains(new PortRef(node.id, i, input))) continue;
+            final double qty = Math.max(0, port.getAmount()) * port.getChance()
+                * (input ? cfg.inputMultiplier(i) : cfg.outputMultiplier(i))
+                * tf;
+            if (qty <= 0) continue;
+            final double rate = count * qty * GuiHelper.TICKS_PER_SECOND / (double) durTicks;
+            out.add(
+                new Boundary(
+                    new PortRef(node.id, i, input),
+                    input ? Kind.SUPPLY : Kind.PRODUCT,
+                    rate,
+                    port.getDisplayName(),
+                    SolverMessage.BOUNDARY_FLOW.toNote(
+                        port.getType()
+                            .formatAmount((float) rate) + "/s "
+                            + port.getDisplayName())));
+        }
     }
 
     /**

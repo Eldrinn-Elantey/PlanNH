@@ -11,9 +11,9 @@ public final class PlannhColors {
     // ── Backgrounds ──
     public static final ColorResource
         SLOT_BAR_BG       = C.argb("slot_bar_bg",        "0x3C242428"),
-        SUMMARY_BG        = C.argb("summary_bg",         "0x64282C34"),
-        SUMMARY_HEADER_BG = C.argb("summary_header_bg",  "0x70323841"),
-        SUMMARY_TITLE_BG  = C.argb("summary_title_bg",   "0x8E484F5C"),
+        SUMMARY_BG        = C.argb("summary_bg",         "0xC8282C34"),
+        SUMMARY_HEADER_BG = C.argb("summary_header_bg",  "0xCC323841"),
+        SUMMARY_TITLE_BG  = C.argb("summary_title_bg",   "0xE0484F5C"),
         NODE_BG           = C.argb("node_bg",            "0x323232E6"),
         CHIP_BG           = C.argb("chip_bg",            "0xE6141414"),
         NOTE_BG           = C.argb("note_bg",            "0xC8FFF0A0"),
@@ -59,7 +59,8 @@ public final class PlannhColors {
     // ── Summary Panel ──
     public static final ColorResource
         SUMMARY_TEXT        = C.rgb("summary_text",        "0xB8BDC8"),
-        SUMMARY_TEXT_MUTED  = C.rgb("summary_text_muted",  "0x99A0AC");
+        SUMMARY_TEXT_MUTED  = C.rgb("summary_text_muted",  "0x99A0AC"),
+        SUMMARY_ROW_HOVER   = C.argb("summary_row_hover",  "0x1EFFFFFF");
 
     // ── Accent Text Colors (opaque) ──
     public static final ColorResource

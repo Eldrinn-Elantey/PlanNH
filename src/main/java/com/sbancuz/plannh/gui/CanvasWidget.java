@@ -101,8 +101,6 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
     /** How far below the pin the chip hangs, in world units. */
     private static final int CHIP_DROP = 3;
     private static final float CHIP_TEXT_SCALE = 0.5f;
-    /** Below this zoom the labels are unreadable, so the chips are only clutter. */
-    private static final float CHIP_MIN_ZOOM = 0.45f;
 
     private static final int GROUP_FIT_PAD = 12;
     private static final float ZOOM_STEP = 0.15f;
@@ -172,7 +170,11 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         rebuildGroupWidgets();
         rebuildNodeWidgets();
 
-        child(new SummaryWidget(this, graph.summary()));
+        child(
+            new SummaryWidget(
+                this,
+                graph.getSummary()
+                    .recompute(graph)));
         background(new DynamicDrawable(() -> new Rectangle().color(getBackgroundColor())));
     }
 
@@ -239,7 +241,11 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         flowchartWidgets.clear();
         rebuildGroupWidgets();
         rebuildNodeWidgets();
-        child(new SummaryWidget(this, graph.summary()));
+        child(
+            new SummaryWidget(
+                this,
+                graph.getSummary()
+                    .recompute(graph)));
     }
 
     /** One entry point, not three: removeAll() drops every child, so a partial rebuild loses the rest. */
@@ -249,7 +255,11 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         flowchartWidgets.clear();
         rebuildGroupWidgets();
         rebuildNodeWidgets();
-        child(new SummaryWidget(this, graph.summary()));
+        child(
+            new SummaryWidget(
+                this,
+                graph.getSummary()
+                    .recompute(graph)));
     }
 
     public void undoGraph() {
@@ -577,6 +587,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
             drawGrid(width, height);
         }
 
+        Stencil.applyAtZero(getArea(), context);
         drawArrows();
         drawExternalChips();
 
@@ -585,6 +596,7 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
         }
 
         drawHoveredPortLabels();
+        Stencil.remove();
     }
 
     private void drawGrid(final int w, final int h) {
@@ -691,7 +703,6 @@ public class CanvasWidget extends ParentWidget<CanvasWidget> implements Interact
      * solve and never stored: they are not {@link Node}s and take no part in layout or routing.
      */
     private void drawExternalChips() {
-        if (graph.getZoom() < CHIP_MIN_ZOOM) return;
         for (final BalanceView.Boundary flow : graph.boundary()) {
             drawChip(flow);
         }

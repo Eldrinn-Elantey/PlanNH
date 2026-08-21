@@ -120,15 +120,17 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
 
     private static CycleButtonWidget modeToggle(final FlowchartWidget<?, ?> panel, final Summary data) {
         final Plan plan = Plan.getInstance();
-        return new CycleButtonWidget().size(64, TITLE_H)
-            .tooltipStatic(t -> t.addLine(IKey.lang("plannh.summary.mode.title")))
+        return new CycleButtonWidget().size(26, TITLE_H)
+            .tooltipStatic(
+                t -> t.addLine(IKey.lang("plannh.summary.mode.title"))
+                    .addLine(IKey.lang("plannh.summary.mode.switch_hint")))
             .value(new EnumValue.Dynamic<>(Summary.Mode.class, plan::getMode, val -> {
                 plan.setMode(val);
                 data.recompute(
                     panel.getCanvas()
                         .getGraph());
             }))
-            .stateOverlay(Summary.Mode.CYCLES, IKey.lang("plannh.summary.mode.cycles"))
-            .stateOverlay(Summary.Mode.THROUGHPUT, IKey.lang("plannh.summary.mode.throughput"));
+            .stateOverlay(Summary.Mode.CYCLES, IKey.lang("plannh.summary.mode.cycles.short"))
+            .stateOverlay(Summary.Mode.THROUGHPUT, IKey.lang("plannh.summary.mode.throughput.short"));
     }
 }

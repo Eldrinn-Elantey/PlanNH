@@ -1,23 +1,15 @@
 package com.sbancuz.plannh.gui.summary;
 
-import javax.annotation.Nonnull;
-
 import com.cleanroommc.modularui.api.GuiAxis;
 import com.cleanroommc.modularui.api.drawable.IKey;
-import com.cleanroommc.modularui.api.widget.Interactable;
 import com.cleanroommc.modularui.drawable.Rectangle;
-import com.cleanroommc.modularui.screen.RichTooltip;
-import com.cleanroommc.modularui.utils.Alignment;
 import com.cleanroommc.modularui.widget.Widget;
-import com.cleanroommc.modularui.widgets.TextWidget;
-import com.sbancuz.plannh.api.PlanAPI;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.Line;
 import com.sbancuz.plannh.data.flowchart.balancer.Severity;
 import com.sbancuz.plannh.gui.FlowchartFlow;
 import com.sbancuz.plannh.gui.FlowchartWidget;
-import com.sbancuz.plannh.gui.GuiHelper;
 import com.sbancuz.plannh.gui.PlannhColors;
 
 /**
@@ -29,8 +21,8 @@ import com.sbancuz.plannh.gui.PlannhColors;
  */
 class SummaryBody extends FlowchartFlow {
 
-    private static final int LINE_H = 12;
-    private static final int TEXT_X = 8;
+    protected static final int LINE_H = 13;
+    protected static final int TEXT_X = 12;
 
     private final Summary data;
     private final Graph graph;
@@ -68,7 +60,15 @@ class SummaryBody extends FlowchartFlow {
     /** Swap the whole row list for the summary's current lines; child churn re-sizes the panel. */
     private void rebuildRows() {
         removeAll();
-        for (final Line<?> line : data.lines(section)) child(row(line));
+        for (final Line<?> line : data.lines(section)) {
+            if (line instanceof Line.Totals) {
+                child(
+                    new Widget<>().fullWidth()
+                        .height(1)
+                        .background(new Rectangle().color(PlannhColors.SEPARATOR_DIM.getColor())));
+            }
+            child(row(line));
+        }
         scheduleResize();
     }
 
@@ -99,98 +99,4 @@ class SummaryBody extends FlowchartFlow {
         return rowsMode == Summary.Mode.THROUGHPUT ? "/s" : " x";
     }
 
-    private static final class TextRow extends FlowchartFlow {
-
-        TextRow(final FlowchartWidget<?, ?> panel, final IKey text, final int color) {
-            super(GuiAxis.X, panel);
-            fullWidth().coverChildrenHeight(LINE_H)
-                .paddingLeft(TEXT_X)
-                .child(
-                    new TextWidget<>(text).color(color)
-                        .textAlign(Alignment.CenterLeft)
-                        .fullWidth());
-        }
-    }
-
-    private static final class MeasureRow extends FlowchartFlow {
-
-        MeasureRow(final FlowchartWidget<?, ?> panel, final Line.Measure<?> measure, final String suffix) {
-            super(GuiAxis.X, panel);
-            final String raw = measure.displayAmount(measure.amount());
-            final String amount = raw.isEmpty() ? "" : raw + suffix;
-            fullWidth().coverChildrenHeight(LINE_H)
-                .paddingLeft(TEXT_X)
-                .mainAxisAlignment(Alignment.MainAxis.SPACE_BETWEEN)
-                .child(
-                    new TextWidget<>(IKey.str(measure.displayName()))
-                        .color(
-                            amount.isEmpty() ? PlannhColors.ACCENT_BLUE.getColor() : PlannhColors.TEXT_WHITE.getColor())
-                        .textAlign(Alignment.CenterLeft));
-            if (!amount.isEmpty()) {
-                child(
-                    new TextWidget<>(IKey.str(amount)).color(PlannhColors.ACCENT_BLUE.getColor())
-                        .textAlign(Alignment.CenterRight));
-            }
-        }
-    }
-
-    /**
-     * The chart-wide totals: total operations plus the time one full cycle takes. The model only
-     * supplies the numbers; the sentence is built and localized here, in the panel, in the shape
-     * the current mode wants (cycles: "Time: 240t (12.0s/cycle)", throughput: "Cycle: 12.0s").
-     */
-    private static final class TotalsRow extends FlowchartFlow {
-
-        TotalsRow(final FlowchartWidget<?, ?> panel, final Line.Totals totals, final Summary.Mode mode) {
-            super(GuiAxis.X, panel);
-            final String ops = GuiHelper.formatCount(totals.operations());
-            final String sec = String.format("%.2f", (double) totals.durationTicks() / GuiHelper.TICKS_PER_SECOND);
-            final IKey text = mode == Summary.Mode.THROUGHPUT ? IKey.lang("plannh.summary.totals.throughput", ops, sec)
-                : IKey.lang("plannh.summary.totals.cycles", ops, totals.durationTicks(), sec);
-            fullWidth().coverChildrenHeight(LINE_H)
-                .paddingLeft(TEXT_X)
-                .child(
-                    new TextWidget<>(text).color(PlannhColors.ACCENT_BLUE.getColor())
-                        .textAlign(Alignment.CenterLeft)
-                        .fullWidth());
-        }
-    }
-
-    /** A clickable choice row: the active answer is lead-marked; the reason it gives up on hover. */
-    private static final class ChoiceRow extends FlowchartFlow implements Interactable {
-
-        private final Graph graph;
-        private final Line.Choice choice;
-
-        ChoiceRow(final FlowchartWidget<?, ?> panel, final Graph graph, final Line.Choice choice) {
-            super(GuiAxis.X, panel);
-            this.graph = graph;
-            this.choice = choice;
-
-            fullWidth().coverChildrenHeight(LINE_H)
-                .hoverBackground(new Rectangle().color(0x22FFFFFF))
-                .child(
-                    new TextWidget<>(IKey.str((choice.active() ? "> " : "  ") + choice.displayName()))
-                        .paddingLeft(TEXT_X)
-                        .color(
-                            choice.active() ? PlannhColors.ACCENT_CYAN2.getColor()
-                                : PlannhColors.SUMMARY_TEXT_MUTED.getColor())
-                        .textAlign(Alignment.CenterLeft)
-                        .fullWidth());
-
-            if (choice.reason() != null) {
-                tooltip(
-                    new RichTooltip().add(
-                        choice.reason()
-                            .render()));
-            }
-        }
-
-        @Override
-        public @Nonnull Result onMousePressed(final int mouseButton) {
-            if (mouseButton != 0) return Result.IGNORE;
-            PlanAPI.recordEdit(graph, () -> graph.setExcessChoice(choice.key()));
-            return Result.SUCCESS;
-        }
-    }
 }

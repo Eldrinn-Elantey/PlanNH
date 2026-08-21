@@ -52,27 +52,9 @@ public class Graph {
      */
     public final transient UndoHistory undoHistory = new UndoHistory();
 
-    /**
-     * This chart's summary-fold bitmask, owned by the Summary it rides on. Never derives: saving
-     * a chart must not pay for a solve just to read which sections its panel has folded away.
-     */
-    public int summaryFolds() {
-        return summary.folds();
-    }
-
-    /** Replaces the fold bitmask read from a save. */
-    public void setSummaryFolds(final int folds) {
-        summary.setFolds(folds);
-    }
-
-    /**
-     * Which of the equally-workable answers the user picked, or null for the solver's own. Applied
-     * as a preference, never as a constraint: a key that no longer fits the chart is dropped with a
-     * note rather than allowed to degrade it.
-     */
     @Getter
-    private ChoiceKey excessChoice;
-    private final Summary summary = new Summary();
+    @Setter
+    private Summary summary = new Summary();
 
     /**
      * The display view, built on first ask after a solve rather than with it: the canvas wants the
@@ -115,8 +97,12 @@ public class Graph {
         bumpVersion();
     }
 
+    public ChoiceKey getExcessChoice() {
+        return summary.excessChoice();
+    }
+
     public void setExcessChoice(final ChoiceKey choice) {
-        excessChoice = choice;
+        summary.excessChoice(choice);
         bumpVersion();
     }
 
@@ -138,10 +124,6 @@ public class Graph {
             solvedAt = version;
         }
         return summary.balance();
-    }
-
-    public Summary summary() {
-        return summary.recompute(this);
     }
 
     /**

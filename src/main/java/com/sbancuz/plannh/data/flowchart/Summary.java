@@ -21,6 +21,7 @@ import com.sbancuz.plannh.data.properties.SummaryProperty;
 import com.sbancuz.plannh.gui.GuiHelper;
 
 import lombok.Getter;
+import lombok.Setter;
 import lombok.experimental.Accessors;
 
 @Accessors(fluent = true)
@@ -158,6 +159,10 @@ public final class Summary extends GraphData {
     @Getter
     transient private List<Note> choiceNotes = List.of();
 
+    @Getter
+    @Setter
+    private ChoiceKey excessChoice;
+
     transient private long atVersion = -1;
 
     /** The {@link Mode} the current {@link #lines} were derived for; a switch re-derives. */
@@ -210,17 +215,7 @@ public final class Summary extends GraphData {
      * Section} ordinal - {@link Section#ALL} the panel's own master collapse included. A single
      * integer, kept and written as-is by the plan serializer.
      */
-    transient private int collapsedSummaryFolds;
-
-    /** The fold bitmask, handed to the serializer; never derives. */
-    public int folds() {
-        return collapsedSummaryFolds;
-    }
-
-    /** Replaces the fold bitmask (read from a save). */
-    public void setFolds(final int folds) {
-        collapsedSummaryFolds = folds;
-    }
+    private int collapsedSummaryFolds = 0;
 
     /** Whether the section is currently folded away in this chart's panel. */
     public boolean isSummaryFold(final Section section) {

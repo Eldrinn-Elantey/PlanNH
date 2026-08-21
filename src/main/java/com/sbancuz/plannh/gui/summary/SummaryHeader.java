@@ -61,16 +61,14 @@ class SummaryHeader extends ParentWidget<SummaryHeader> {
         }
     }
 
-    /** The shared fold toggle for the title bar and every section header. */
     static CycleButtonWidget foldToggle(final Summary data, final Summary.Section section) {
         return new CycleButtonWidget().stateCount(2)
             .size(HEADER_H, HEADER_H)
-            .stateOverlay(true, IKey.str("^"))
-            .stateOverlay(false, IKey.str("V"))
+            .stateOverlay(true, IKey.str("V"))
+            .stateOverlay(false, IKey.str("^"))
             .value(new BoolValue.Dynamic(() -> data.isSummaryFold(section), val -> data.setSummaryFold(section, val)));
     }
 
-    /** "Choices (3)" - the count is the number of rows the header commands, resolved live; HELP has none. */
     private static IKey headerTitle(final Summary.Section section, final Summary data) {
         final IKey title = IKey.lang(section.titleKey());
         if (section == Summary.Section.HELP) return title;
