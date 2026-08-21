@@ -1,10 +1,13 @@
 package com.sbancuz.plannh.gui.summary;
 
+import net.minecraft.util.StatCollector;
+
 import com.cleanroommc.modularui.api.GuiAxis;
 import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.drawable.Rectangle;
 import com.cleanroommc.modularui.widget.Widget;
 import com.sbancuz.plannh.data.flowchart.Graph;
+import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.Line;
 import com.sbancuz.plannh.data.flowchart.balancer.Severity;
@@ -29,6 +32,7 @@ class SummaryBody extends FlowchartFlow {
     private final Summary.Section section;
     private long rowsBuiltAt = Long.MIN_VALUE;
     private Summary.Mode rowsMode = null;
+    private Summary.RateUnit rowsUnit = Summary.RateUnit.SECONDS;
 
     SummaryBody(final FlowchartWidget<?, ?> panel, final Summary data, final Graph graph,
         final Summary.Section section) {
@@ -37,6 +41,8 @@ class SummaryBody extends FlowchartFlow {
         this.graph = graph;
         this.section = section;
         this.rowsMode = data.computedMode();
+        this.rowsUnit = Plan.getInstance()
+            .getRateUnit();
 
         fullWidth().coverChildrenHeight()
             .setEnabledIf(_ -> !data.isSummaryFold(section));
@@ -50,9 +56,12 @@ class SummaryBody extends FlowchartFlow {
         // Reload both when the chart moves and when the throughput/cycles mode changes (which
         // re-derives the rows but not the graph version).
         final Summary.Mode mode = data.computedMode();
-        if (rowsBuiltAt != data.calculatedAt() || rowsMode != mode) {
+        final Summary.RateUnit unit = Plan.getInstance()
+            .getRateUnit();
+        if (rowsBuiltAt != data.calculatedAt() || rowsMode != mode || rowsUnit != unit) {
             rowsBuiltAt = data.calculatedAt();
             rowsMode = mode;
+            rowsUnit = unit;
             rebuildRows();
         }
     }
@@ -75,7 +84,7 @@ class SummaryBody extends FlowchartFlow {
     private Widget<?> row(final Line<?> line) {
         final FlowchartWidget<?, ?> panel = getFlowchartParent();
         return switch (line) {
-            case Line.Measure<?> measure -> new MeasureRow(panel, measure, rowSuffix());
+            case Line.Measure<?> measure -> new MeasureRow(panel, measure, rowSuffix(), amountScale());
             case Line.Message message -> new TextRow(panel, IKey.str(message.displayName()),
                 severityColor(message.note().severity()));
             case Line.Text(String key) -> new TextRow(panel, IKey.lang(key), PlannhColors.SUMMARY_TEXT.getColor());
@@ -95,8 +104,19 @@ class SummaryBody extends FlowchartFlow {
     }
 
     private String rowSuffix() {
-        if (section == Summary.Section.MACHINE_COUNTS) return " x";
-        return rowsMode == Summary.Mode.THROUGHPUT ? "/s" : " x";
+        if (!isRateSection() || rowsMode != Summary.Mode.THROUGHPUT) {
+            return " x";
+        }
+        return StatCollector.translateToLocal(rowsUnit.suffixKey());
+    }
+
+    /** Only outputs and inputs carry rates; machine counts and properties are per-cycle totals. */
+    private boolean isRateSection() {
+        return section == Summary.Section.OUTPUTS || section == Summary.Section.INPUTS;
+    }
+
+    private double amountScale() {
+        return isRateSection() && rowsMode == Summary.Mode.THROUGHPUT ? rowsUnit.secondsPerUnit : 1.0;
     }
 
 }

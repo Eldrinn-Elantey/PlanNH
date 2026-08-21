@@ -14,9 +14,10 @@ final class MeasureRow extends FlowchartFlow {
 
     private static final float NAME_RATIO = 2 / 3f;
 
-    MeasureRow(final FlowchartWidget<?, ?> panel, final Summary.Line.Measure<?> measure, final String suffix) {
+    MeasureRow(final FlowchartWidget<?, ?> panel, final Summary.Line.Measure<?> measure, final String suffix,
+        final double scale) {
         super(GuiAxis.X, panel);
-        final String raw = measure.displayAmount(measure.amount());
+        final String raw = measure.displayAmount((float) (measure.amount() * scale));
         final String amount = raw.isEmpty() ? "" : raw + suffix;
         fullWidth().coverChildrenHeight(SummaryBody.LINE_H)
             .paddingLeft(SummaryBody.TEXT_X)

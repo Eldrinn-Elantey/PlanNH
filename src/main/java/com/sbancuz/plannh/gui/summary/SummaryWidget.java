@@ -70,8 +70,10 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
                             FlowchartFlow.row(this)
                                 .coverChildren()
                                 .childPadding(BUTTON_GAP)
+                                .collapseDisabledChild()
                                 .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                                 .child(modeToggle(this, data))
+                                .child(rateToggle(data))
                                 .child(SummaryHeader.foldToggle(data, Summary.Section.ALL))))
                 .child(
                     new Widget<>().fullWidth()
@@ -99,6 +101,20 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
 
     private SummarySection sec(final Summary.Section section, final ColorResource accent, final ColorResource text) {
         return new SummarySection(this, section, accent.getColor(), text.getColor()).marginBottom(SECTION_GAP);
+    }
+
+    private static CycleButtonWidget rateToggle(final Summary data) {
+        final Plan plan = Plan.getInstance();
+        final CycleButtonWidget toggle = new CycleButtonWidget().size(SummaryHeader.HEADER_H, SummaryHeader.HEADER_H)
+            .tooltipStatic(
+                t -> t.addLine(IKey.lang("plannh.summary.rate.title"))
+                    .addLine(IKey.lang("plannh.summary.mode.switch_hint")))
+            .value(new EnumValue.Dynamic<>(Summary.RateUnit.class, plan::getRateUnit, plan::setRateUnit))
+            .setEnabledIf(_ -> plan.getMode() == Summary.Mode.THROUGHPUT);
+        for (final Summary.RateUnit unit : Summary.RateUnit.VALUES) {
+            toggle.stateOverlay(unit, IKey.lang(unit.langKey));
+        }
+        return toggle;
     }
 
     private static CycleButtonWidget modeToggle(final FlowchartWidget<?, ?> panel, final Summary data) {

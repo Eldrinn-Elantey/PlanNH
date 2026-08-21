@@ -34,6 +34,32 @@ public final class Summary extends GraphData {
         THROUGHPUT
     }
 
+    /**
+     * The time unit per-second rates are spelled in. {@code secondsPerUnit} rescales a rate that
+     * is stored per second; the lang keys cover the button's short form and the row suffix.
+     */
+    public enum RateUnit {
+
+        SECONDS("second", 1),
+        MINUTES("minute", 60),
+        HOURS("hour", 3600),
+        DAYS("day", 86400);
+
+        public static final RateUnit[] VALUES = RateUnit.values();
+
+        public final String langKey;
+        public final double secondsPerUnit;
+
+        RateUnit(final String name, final double secondsPerUnit) {
+            this.langKey = "plannh.summary.rate." + name;
+            this.secondsPerUnit = secondsPerUnit;
+        }
+
+        public String suffixKey() {
+            return langKey + ".suffix";
+        }
+    }
+
     public enum Section {
 
         ALL("plannh.summary.title.summary"),
@@ -55,8 +81,6 @@ public final class Summary extends GraphData {
         public String titleKey() {
             return titleKey;
         }
-
-        public static final Section[] VALUES = Section.values();
     }
 
     /**
