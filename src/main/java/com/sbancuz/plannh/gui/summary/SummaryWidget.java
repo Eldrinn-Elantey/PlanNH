@@ -9,7 +9,6 @@ import com.cleanroommc.modularui.widget.scroll.VerticalScrollData;
 import com.cleanroommc.modularui.widgets.CycleButtonWidget;
 import com.cleanroommc.modularui.widgets.TextWidget;
 import com.gtnewhorizon.gtnhlib.color.ColorResource;
-import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.gui.CanvasWidget;
 import com.sbancuz.plannh.gui.FlowchartFlow;
@@ -104,13 +103,12 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
     }
 
     private static CycleButtonWidget rateToggle(final Summary data) {
-        final Plan plan = Plan.getInstance();
         final CycleButtonWidget toggle = new CycleButtonWidget().size(SummaryHeader.HEADER_H, SummaryHeader.HEADER_H)
             .tooltipStatic(
                 t -> t.addLine(IKey.lang("plannh.summary.rate.title"))
                     .addLine(IKey.lang("plannh.summary.mode.switch_hint")))
-            .value(new EnumValue.Dynamic<>(Summary.RateUnit.class, plan::getRateUnit, plan::setRateUnit))
-            .setEnabledIf(_ -> plan.getMode() == Summary.Mode.THROUGHPUT);
+            .value(new EnumValue.Dynamic<>(Summary.RateUnit.class, data::rateUnit, data::rateUnit))
+            .setEnabledIf(_ -> data.mode() == Summary.Mode.THROUGHPUT);
         for (final Summary.RateUnit unit : Summary.RateUnit.VALUES) {
             toggle.stateOverlay(unit, IKey.lang(unit.langKey));
         }
@@ -118,13 +116,12 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
     }
 
     private static CycleButtonWidget modeToggle(final FlowchartWidget<?, ?> panel, final Summary data) {
-        final Plan plan = Plan.getInstance();
         return new CycleButtonWidget().size(SummaryHeader.HEADER_H, SummaryHeader.HEADER_H)
             .tooltipStatic(
                 t -> t.addLine(IKey.lang("plannh.summary.mode.title"))
                     .addLine(IKey.lang("plannh.summary.mode.switch_hint")))
-            .value(new EnumValue.Dynamic<>(Summary.Mode.class, plan::getMode, val -> {
-                plan.setMode(val);
+            .value(new EnumValue.Dynamic<>(Summary.Mode.class, data::mode, val -> {
+                data.mode(val);
                 data.recompute(
                     panel.getCanvas()
                         .getGraph());

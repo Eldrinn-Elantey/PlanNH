@@ -7,7 +7,6 @@ import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.drawable.Rectangle;
 import com.cleanroommc.modularui.widget.Widget;
 import com.sbancuz.plannh.data.flowchart.Graph;
-import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.Line;
 import com.sbancuz.plannh.data.flowchart.balancer.Severity;
@@ -41,8 +40,7 @@ class SummaryBody extends FlowchartFlow {
         this.graph = graph;
         this.section = section;
         this.rowsMode = data.computedMode();
-        this.rowsUnit = Plan.getInstance()
-            .getRateUnit();
+        this.rowsUnit = data.rateUnit();
 
         fullWidth().coverChildrenHeight()
             .setEnabledIf(_ -> !data.isSummaryFold(section));
@@ -56,8 +54,7 @@ class SummaryBody extends FlowchartFlow {
         // Reload both when the chart moves and when the throughput/cycles mode changes (which
         // re-derives the rows but not the graph version).
         final Summary.Mode mode = data.computedMode();
-        final Summary.RateUnit unit = Plan.getInstance()
-            .getRateUnit();
+        final Summary.RateUnit unit = data.rateUnit();
         if (rowsBuiltAt != data.calculatedAt() || rowsMode != mode || rowsUnit != unit) {
             rowsBuiltAt = data.calculatedAt();
             rowsMode = mode;

@@ -192,6 +192,16 @@ public final class Summary extends GraphData {
     /** The {@link Mode} the current {@link #lines} were derived for; a switch re-derives. */
     transient private Mode atMode = null;
 
+    /** The panel-wide display mode: aligned per-cycle totals or per-second rates. */
+    @Getter
+    @Setter
+    private Mode mode = Mode.CYCLES;
+
+    /** The unit throughput rates are spelled in; only meaningful in {@link Mode#THROUGHPUT}. */
+    @Getter
+    @Setter
+    private RateUnit rateUnit = RateUnit.SECONDS;
+
     /** Where a fresh chart's summary panel starts; kept in the GraphData so the spot is per-chart. */
     public static final int DEFAULT_X = 210;
     public static final int DEFAULT_Y = 46;
@@ -269,8 +279,7 @@ public final class Summary extends GraphData {
      * {@link Mode}.
      */
     public Summary recompute(final Graph graph) {
-        final Mode mode = Plan.getInstance()
-            .getMode();
+        final Mode mode = this.mode;
         if (atVersion >= graph.version() && atMode == mode) return this;
         atMode = mode;
 

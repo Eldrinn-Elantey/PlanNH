@@ -22,8 +22,6 @@ public class Plan {
 
     private transient final List<Graph> graphs = new ArrayList<>();
     private int activeIndex = 0;
-    private Summary.Mode mode = Summary.Mode.CYCLES;
-    private Summary.RateUnit rateUnit = Summary.RateUnit.SECONDS;
     private boolean snapToGrid;
 
     private Plan() {}
@@ -53,7 +51,7 @@ public class Plan {
                 final String data = Files.readString(saveFile.toPath(), StandardCharsets.UTF_8);
                 return Serializer.decodePlan(data);
             }
-        } catch (final Exception | LinkageError ignored) {}
+        } catch (final Exception ignored) {}
         final Plan plan = new Plan();
         plan.getGraphs()
             .add(new Graph("Slot 1"));
