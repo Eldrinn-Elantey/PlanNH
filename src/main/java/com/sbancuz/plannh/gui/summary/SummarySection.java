@@ -3,6 +3,7 @@ package com.sbancuz.plannh.gui.summary;
 import com.cleanroommc.modularui.widget.ParentWidget;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.gui.FlowchartFlow;
+import com.sbancuz.plannh.gui.FlowchartList;
 import com.sbancuz.plannh.gui.FlowchartWidget;
 
 /**
@@ -15,10 +16,11 @@ class SummarySection extends ParentWidget<SummarySection> {
     private static final int INNER_GAP = 3;
 
     private final Summary data;
+    private final Summary.Section section;
 
-    SummarySection(final FlowchartWidget<?, ?> panel, final Summary.Section section, final int accent,
-        final int titleTextColor) {
+    SummarySection(final FlowchartWidget<?, ?> panel, final Summary.Section section, FlowchartList sectionsList) {
         this.data = (Summary) panel.getData();
+        this.section = section;
 
         fullWidth().coverChildrenHeight()
             .setEnabledIf(_ -> data.lineCount(section) > 0);
@@ -29,7 +31,7 @@ class SummarySection extends ParentWidget<SummarySection> {
                 .coverChildrenHeight()
                 .childPadding(INNER_GAP)
                 .collapseDisabledChild()
-                .child(new SummaryHeader(panel, data, section, accent, titleTextColor))
+                .child(new SummaryHeader(panel, data, section, sectionsList))
                 .child(
                     new SummaryBody(
                         panel,
@@ -37,5 +39,9 @@ class SummarySection extends ParentWidget<SummarySection> {
                         panel.getCanvas()
                             .getGraph(),
                         section).setEnabledIf(_ -> !data.isSummaryFold(section))));
+    }
+
+    Summary.Section section() {
+        return section;
     }
 }

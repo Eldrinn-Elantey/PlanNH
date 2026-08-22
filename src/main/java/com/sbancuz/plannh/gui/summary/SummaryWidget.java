@@ -8,7 +8,7 @@ import com.cleanroommc.modularui.widget.Widget;
 import com.cleanroommc.modularui.widget.scroll.VerticalScrollData;
 import com.cleanroommc.modularui.widgets.CycleButtonWidget;
 import com.cleanroommc.modularui.widgets.TextWidget;
-import com.gtnewhorizon.gtnhlib.color.ColorResource;
+import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.gui.CanvasWidget;
 import com.sbancuz.plannh.gui.FlowchartFlow;
@@ -19,8 +19,9 @@ import com.sbancuz.plannh.gui.PlannhColors;
 /**
  * The summary panel: a draggable canvas widget that reads one chart's {@link Summary} - a title
  * bar with the master collapse (fold {@link Summary.Section#ALL}), then one {@link SummarySection} per
- * content bucket in reading order. It never re-sorts and never runs a solver; every row was
- * decided by {@link Summary#recompute}. When a newer solve moves the summary it just re-lays-out.
+ * content bucket in the chart's stored display order. It never re-sorts and never runs a solver;
+ * every row was decided by {@link Summary#recompute}. When a newer solve moves the summary it just
+ * re-lays-out.
  */
 public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
 
@@ -39,6 +40,33 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
         super(canvas, data);
 
         coverChildren();
+
+        final FlowchartList sectionsList = new FlowchartList().fullWidth()
+            .paddingRight(SCROLLBAR_GAP)
+            .crossAxisAlignment(Alignment.CrossAxis.START)
+            .scrollDirection(new VerticalScrollData())
+            .setEnabledIf(_ -> !data.isSummaryFold(Summary.Section.ALL))
+            .maxSize(
+                () -> Math.max(
+                    MIN_VIEWPORT_H,
+                    this.canvas.getArea().height / this.canvas.getGraph()
+                        .getZoom() - PANEL_CHROME));
+
+        sectionsList.onMove(children -> {
+            final int[] order = new int[children.size()];
+            for (int i = 0; i < order.length; i++) {
+                order[i] = ((SummarySection) children.get(i)).section()
+                    .ordinal();
+            }
+            Plan.getInstance()
+                .setSectionOrder(order);
+        });
+
+        for (final int ordinal : Plan.getInstance()
+            .getSectionOrder()) {
+            final Summary.Section section = Summary.Section.VALUES[ordinal];
+            sectionsList.child(new SummarySection(this, section, sectionsList).marginBottom(SECTION_GAP));
+        }
 
         child(
             FlowchartFlow.col(this)
@@ -71,62 +99,43 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
                                 .childPadding(BUTTON_GAP)
                                 .collapseDisabledChild()
                                 .crossAxisAlignment(Alignment.CrossAxis.CENTER)
-                                .child(modeToggle(this, data))
-                                .child(rateToggle(data))
+                                .child(modeToggle(this))
+                                .child(rateToggle())
                                 .child(SummaryHeader.foldToggle(data, Summary.Section.ALL))))
                 .child(
                     new Widget<>().fullWidth()
                         .height(1)
                         .background(new Rectangle().color(PlannhColors.SUMMARY_TITLE_LINE.getColor())))
-                .child(
-                    new FlowchartList().fullWidth()
-                        .paddingRight(SCROLLBAR_GAP)
-                        .crossAxisAlignment(Alignment.CrossAxis.START)
-                        .scrollDirection(new VerticalScrollData())
-                        .setEnabledIf(_ -> !data.isSummaryFold(Summary.Section.ALL))
-                        .maxSize(
-                            () -> Math.max(
-                                MIN_VIEWPORT_H,
-                                canvas.getArea().height / canvas.getGraph()
-                                    .getZoom() - PANEL_CHROME))
-                        .child(sec(Summary.Section.OUTPUTS, PlannhColors.SECTION_PRODUCT, PlannhColors.ACCENT_AMBER))
-                        .child(sec(Summary.Section.INPUTS, PlannhColors.SECTION_INPUT, PlannhColors.ACCENT_GREEN2))
-                        .child(sec(Summary.Section.PROPERTIES, PlannhColors.SECTION_OPS, PlannhColors.ACCENT_BLUE))
-                        .child(sec(Summary.Section.CHOICES, PlannhColors.SECTION_CHOICE, PlannhColors.ACCENT_CYAN2))
-                        .child(sec(Summary.Section.MACHINE_COUNTS, PlannhColors.SECTION_OPS, PlannhColors.ACCENT_BLUE))
-                        .child(sec(Summary.Section.MESSAGES, PlannhColors.SECTION_WARN, PlannhColors.ACCENT_YELLOW))
-                        .child(sec(Summary.Section.HELP, PlannhColors.SECTION_FLUID_OUT, PlannhColors.TEXT_LIGHT))));
+                .child(sectionsList));
     }
 
-    private SummarySection sec(final Summary.Section section, final ColorResource accent, final ColorResource text) {
-        return new SummarySection(this, section, accent.getColor(), text.getColor()).marginBottom(SECTION_GAP);
-    }
-
-    private static CycleButtonWidget rateToggle(final Summary data) {
+    private static CycleButtonWidget rateToggle() {
+        final Plan plan = Plan.getInstance();
         final CycleButtonWidget toggle = new CycleButtonWidget().size(SummaryHeader.HEADER_H, SummaryHeader.HEADER_H)
             .tooltipStatic(
                 t -> t.addLine(IKey.lang("plannh.summary.rate.title"))
                     .addLine(IKey.lang("plannh.summary.mode.switch_hint")))
-            .value(new EnumValue.Dynamic<>(Summary.RateUnit.class, data::rateUnit, data::rateUnit))
-            .setEnabledIf(_ -> data.mode() == Summary.Mode.THROUGHPUT);
-        for (final Summary.RateUnit unit : Summary.RateUnit.VALUES) {
+            .value(new EnumValue.Dynamic<>(Plan.RateUnit.class, plan::getRateUnit, plan::setRateUnit))
+            .setEnabledIf(_ -> plan.getMode() == Plan.Mode.THROUGHPUT);
+        for (final Plan.RateUnit unit : Plan.RateUnit.VALUES) {
             toggle.stateOverlay(unit, IKey.lang(unit.langKey));
         }
         return toggle;
     }
 
-    private static CycleButtonWidget modeToggle(final FlowchartWidget<?, ?> panel, final Summary data) {
+    private CycleButtonWidget modeToggle(final FlowchartWidget<?, ?> panel) {
         return new CycleButtonWidget().size(SummaryHeader.HEADER_H, SummaryHeader.HEADER_H)
             .tooltipStatic(
                 t -> t.addLine(IKey.lang("plannh.summary.mode.title"))
                     .addLine(IKey.lang("plannh.summary.mode.switch_hint")))
-            .value(new EnumValue.Dynamic<>(Summary.Mode.class, data::mode, val -> {
-                data.mode(val);
+            .value(new EnumValue.Dynamic<>(Plan.Mode.class, Plan.getInstance()::getMode, val -> {
+                Plan.getInstance()
+                    .setMode(val);
                 data.recompute(
                     panel.getCanvas()
                         .getGraph());
             }))
-            .stateOverlay(Summary.Mode.CYCLES, IKey.lang("plannh.summary.mode.cycles.short"))
-            .stateOverlay(Summary.Mode.THROUGHPUT, IKey.lang("plannh.summary.mode.throughput.short"));
+            .stateOverlay(Plan.Mode.CYCLES, IKey.lang("plannh.summary.mode.cycles.short"))
+            .stateOverlay(Plan.Mode.THROUGHPUT, IKey.lang("plannh.summary.mode.throughput.short"));
     }
 }

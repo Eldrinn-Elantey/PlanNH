@@ -29,37 +29,6 @@ public final class Summary extends GraphData {
 
     public static final String TYPE = "summary";
 
-    public enum Mode {
-        CYCLES,
-        THROUGHPUT
-    }
-
-    /**
-     * The time unit per-second rates are spelled in. {@code secondsPerUnit} rescales a rate that
-     * is stored per second; the lang keys cover the button's short form and the row suffix.
-     */
-    public enum RateUnit {
-
-        SECONDS("second", 1),
-        MINUTES("minute", 60),
-        HOURS("hour", 3600),
-        DAYS("day", 86400);
-
-        public static final RateUnit[] VALUES = RateUnit.values();
-
-        public final String langKey;
-        public final double secondsPerUnit;
-
-        RateUnit(final String name, final double secondsPerUnit) {
-            this.langKey = "plannh.summary.rate." + name;
-            this.secondsPerUnit = secondsPerUnit;
-        }
-
-        public String suffixKey() {
-            return langKey + ".suffix";
-        }
-    }
-
     public enum Section {
 
         ALL("plannh.summary.title.summary"),
@@ -70,6 +39,8 @@ public final class Summary extends GraphData {
         MACHINE_COUNTS("plannh.summary.title.machine_counts"),
         MESSAGES("plannh.summary.title.messages"),
         HELP("plannh.summary.title.help");
+
+        public static final Section[] VALUES = Section.values();
 
         private final String titleKey;
 
@@ -171,6 +142,13 @@ public final class Summary extends GraphData {
      */
     transient private final Map<Section, List<Line<?>>> lines = new EnumMap<>(Section.class);
 
+    /**
+     * Which sections of this chart's panel the user has folded away, as one bit per {@link
+     * Section} ordinal - {@link Section#ALL} the panel's own master collapse included. A single
+     * integer, kept and written as-is by the plan serializer.
+     */
+    private int collapsedSummaryFolds = 0;
+
     @Getter
     @Nullable
     transient private BalanceResult balance = null;
@@ -189,18 +167,11 @@ public final class Summary extends GraphData {
 
     transient private long atVersion = -1;
 
-    /** The {@link Mode} the current {@link #lines} were derived for; a switch re-derives. */
-    transient private Mode atMode = null;
+    /** The {@link Plan.Mode} the current {@link #lines} were derived for; a switch re-derives. */
+    transient private Plan.Mode atMode = null;
 
-    /** The panel-wide display mode: aligned per-cycle totals or per-second rates. */
-    @Getter
-    @Setter
-    private Mode mode = Mode.CYCLES;
-
-    /** The unit throughput rates are spelled in; only meaningful in {@link Mode#THROUGHPUT}. */
-    @Getter
-    @Setter
-    private RateUnit rateUnit = RateUnit.SECONDS;
+    /** The plan's {@code settingsVersion} the current rows were derived under. */
+    transient private long atSettings = -1;
 
     /** Where a fresh chart's summary panel starts; kept in the GraphData so the spot is per-chart. */
     public static final int DEFAULT_X = 210;
@@ -239,17 +210,10 @@ public final class Summary extends GraphData {
         return atVersion;
     }
 
-    /** The {@link Mode} the current rows were derived for; the panel pings it to reload. */
-    public Mode computedMode() {
+    /** The {@link Plan.Mode} the current rows were derived for; the panel pings it to reload. */
+    public Plan.Mode computedMode() {
         return atMode;
     }
-
-    /**
-     * Which sections of this chart's panel the user has folded away, as one bit per {@link
-     * Section} ordinal - {@link Section#ALL} the panel's own master collapse included. A single
-     * integer, kept and written as-is by the plan serializer.
-     */
-    private int collapsedSummaryFolds = 0;
 
     /** Whether the section is currently folded away in this chart's panel. */
     public boolean isSummaryFold(final Section section) {
@@ -275,13 +239,15 @@ public final class Summary extends GraphData {
 
     /**
      * Re-derive this summary's lines from a fresh balance: every node's throughput is scaled up to
-     * the longest recipe on the chart (one cycle's rates) or to a per-second rate, per the panel's
-     * {@link Mode}.
+     * the longest recipe on the chart (one cycle's rates) or to a per-second rate, per the plan's
+     * {@link Plan.Mode}.
      */
     public Summary recompute(final Graph graph) {
-        final Mode mode = this.mode;
-        if (atVersion >= graph.version() && atMode == mode) return this;
+        final Plan plan = Plan.getInstance();
+        final Plan.Mode mode = plan.getMode();
+        if (atVersion >= graph.version() && atMode == mode && atSettings == plan.getSettingsVersion()) return this;
         atMode = mode;
+        atSettings = plan.getSettingsVersion();
 
         this.balance = Balancer.balance(graph, graph.getBalanceMode());
 
@@ -297,7 +263,7 @@ public final class Summary extends GraphData {
                 .get(node.id);
             if (nb == null) continue;
 
-            final float scale = mode == Mode.THROUGHPUT
+            final float scale = mode == Plan.Mode.THROUGHPUT
                 ? (float) GuiHelper.TICKS_PER_SECOND / Math.max(1, nb.durationPerOp())
                 : (float) cycleTicks / Math.max(1, nb.durationPerOp());
             accumulate(node.outputs, nb.effectiveOutputs(), scale, outputs);

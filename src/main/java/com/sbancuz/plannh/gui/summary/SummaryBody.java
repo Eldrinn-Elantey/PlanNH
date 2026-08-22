@@ -7,6 +7,7 @@ import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.drawable.Rectangle;
 import com.cleanroommc.modularui.widget.Widget;
 import com.sbancuz.plannh.data.flowchart.Graph;
+import com.sbancuz.plannh.data.flowchart.Plan;
 import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.Line;
 import com.sbancuz.plannh.data.flowchart.balancer.Severity;
@@ -30,8 +31,8 @@ class SummaryBody extends FlowchartFlow {
     private final Graph graph;
     private final Summary.Section section;
     private long rowsBuiltAt = Long.MIN_VALUE;
-    private Summary.Mode rowsMode = null;
-    private Summary.RateUnit rowsUnit = Summary.RateUnit.SECONDS;
+    private Plan.Mode rowsMode = null;
+    private Plan.RateUnit rowsUnit = Plan.RateUnit.SECONDS;
 
     SummaryBody(final FlowchartWidget<?, ?> panel, final Summary data, final Graph graph,
         final Summary.Section section) {
@@ -39,8 +40,9 @@ class SummaryBody extends FlowchartFlow {
         this.data = data;
         this.graph = graph;
         this.section = section;
+        final Plan plan = Plan.getInstance();
         this.rowsMode = data.computedMode();
-        this.rowsUnit = data.rateUnit();
+        this.rowsUnit = plan.getRateUnit();
 
         fullWidth().coverChildrenHeight()
             .setEnabledIf(_ -> !data.isSummaryFold(section));
@@ -51,10 +53,11 @@ class SummaryBody extends FlowchartFlow {
     @Override
     public void onUpdate() {
         super.onUpdate();
-        // Reload both when the chart moves and when the throughput/cycles mode changes (which
-        // re-derives the rows but not the graph version).
-        final Summary.Mode mode = data.computedMode();
-        final Summary.RateUnit unit = data.rateUnit();
+        // Reload both when the chart moves and when the plan-wide throughput/cycles mode or rate
+        // unit changes (which re-derive the rows but not the graph version).
+        final Plan plan = Plan.getInstance();
+        final Plan.Mode mode = data.computedMode();
+        final Plan.RateUnit unit = plan.getRateUnit();
         if (rowsBuiltAt != data.calculatedAt() || rowsMode != mode || rowsUnit != unit) {
             rowsBuiltAt = data.calculatedAt();
             rowsMode = mode;
@@ -101,7 +104,7 @@ class SummaryBody extends FlowchartFlow {
     }
 
     private String rowSuffix() {
-        if (!isRateSection() || rowsMode != Summary.Mode.THROUGHPUT) {
+        if (!isRateSection() || rowsMode != Plan.Mode.THROUGHPUT) {
             return " x";
         }
         return StatCollector.translateToLocal(rowsUnit.suffixKey());
@@ -113,7 +116,7 @@ class SummaryBody extends FlowchartFlow {
     }
 
     private double amountScale() {
-        return isRateSection() && rowsMode == Summary.Mode.THROUGHPUT ? rowsUnit.secondsPerUnit : 1.0;
+        return isRateSection() && rowsMode == Plan.Mode.THROUGHPUT ? rowsUnit.secondsPerUnit : 1.0;
     }
 
 }

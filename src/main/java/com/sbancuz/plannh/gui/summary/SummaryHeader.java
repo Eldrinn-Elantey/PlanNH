@@ -12,22 +12,23 @@ import com.sbancuz.plannh.data.flowchart.Summary;
 import com.sbancuz.plannh.data.flowchart.Summary.Line;
 import com.sbancuz.plannh.data.flowchart.balancer.Note;
 import com.sbancuz.plannh.gui.FlowchartFlow;
+import com.sbancuz.plannh.gui.FlowchartList;
 import com.sbancuz.plannh.gui.FlowchartWidget;
 import com.sbancuz.plannh.gui.PlannhColors;
 
 /**
- * The title row of one summary section: a section-colored highlight bar, the section's name (with
- * a row count for the content sections), and a fold toggle wired straight into the {@link
- * Summary}'s fold bitmask. The CHOICES header carries the budget notes as a hover tooltip.
+ * The title row of one summary section: the reorder grip, a section-colored highlight bar, the
+ * section's name (with a row count for the content sections), and a fold toggle wired straight
+ * into the {@link Summary}'s fold bitmask. The CHOICES header carries the budget notes as a hover
+ * tooltip.
  */
 class SummaryHeader extends ParentWidget<SummaryHeader> {
 
     public static final int HEADER_H = 18;
     private static final int PAD = 4;
-    private static final int ACCENT_W = 3;
 
     protected SummaryHeader(final FlowchartWidget<?, ?> panel, final Summary data, final Summary.Section section,
-        final int accent, final int titleTextColor) {
+        FlowchartList sectionsList) {
         fullWidth().height(HEADER_H)
             .background(new Rectangle().color(PlannhColors.SUMMARY_HEADER_BG.getColor()));
 
@@ -43,8 +44,8 @@ class SummaryHeader extends ParentWidget<SummaryHeader> {
                         .coverChildren()
                         .childPadding(PAD)
                         .crossAxisAlignment(Alignment.CrossAxis.CENTER)
-                        .child(accentStrip(accent))
-                        .child(new TextWidget<>(headerTitle(section, data)).color(titleTextColor)))
+                        .child(new FlowchartList.Grip(sectionsList, accentColor(section), textColor(section)))
+                        .child(new TextWidget<>(headerTitle(section, data)).color(textColor(section))))
                 .child(foldToggle(data, section)));
 
         child(
@@ -60,6 +61,31 @@ class SummaryHeader extends ParentWidget<SummaryHeader> {
                 }
             });
         }
+    }
+
+    /// TODO: Find a better way to have a palette
+    private static int accentColor(final Summary.Section section) {
+        return switch (section) {
+            case OUTPUTS -> PlannhColors.SECTION_PRODUCT.getColor();
+            case INPUTS -> PlannhColors.SECTION_INPUT.getColor();
+            case PROPERTIES, MACHINE_COUNTS -> PlannhColors.SECTION_OPS.getColor();
+            case CHOICES -> PlannhColors.SECTION_CHOICE.getColor();
+            case MESSAGES -> PlannhColors.SECTION_WARN.getColor();
+            case HELP -> PlannhColors.SECTION_FLUID_OUT.getColor();
+            default -> PlannhColors.SECTION_CHOICE.getColor();
+        };
+    }
+
+    private static int textColor(final Summary.Section section) {
+        return switch (section) {
+            case OUTPUTS -> PlannhColors.ACCENT_AMBER.getColor();
+            case INPUTS -> PlannhColors.ACCENT_GREEN2.getColor();
+            case PROPERTIES, MACHINE_COUNTS -> PlannhColors.ACCENT_BLUE.getColor();
+            case CHOICES -> PlannhColors.ACCENT_CYAN2.getColor();
+            case MESSAGES -> PlannhColors.ACCENT_YELLOW.getColor();
+            case HELP -> PlannhColors.TEXT_LIGHT.getColor();
+            default -> PlannhColors.TEXT_WHITE.getColor();
+        };
     }
 
     static CycleButtonWidget foldToggle(final Summary data, final Summary.Section section) {
@@ -86,8 +112,4 @@ class SummaryHeader extends ParentWidget<SummaryHeader> {
         return data.lineCount(section);
     }
 
-    private static Widget<?> accentStrip(final int color) {
-        return new Widget<>().size(ACCENT_W, HEADER_H)
-            .background(new Rectangle().color(color));
-    }
 }
