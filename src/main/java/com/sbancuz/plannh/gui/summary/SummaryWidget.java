@@ -88,7 +88,6 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
                         .paddingLeft(TITLE_INSET_X)
                         .childPadding(PADDING)
                         .mainAxisAlignment(Alignment.MainAxis.SPACE_BETWEEN)
-                        .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                         .background(new Rectangle().color(PlannhColors.SUMMARY_TITLE_BG.getColor()))
                         .child(
                             new TextWidget<>(IKey.lang(Summary.Section.ALL.titleKey()))
@@ -98,7 +97,6 @@ public class SummaryWidget extends FlowchartWidget<SummaryWidget, Summary> {
                                 .coverChildren()
                                 .childPadding(BUTTON_GAP)
                                 .collapseDisabledChild()
-                                .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                                 .child(modeToggle(this))
                                 .child(rateToggle())
                                 .child(SummaryHeader.foldToggle(data, Summary.Section.ALL))))

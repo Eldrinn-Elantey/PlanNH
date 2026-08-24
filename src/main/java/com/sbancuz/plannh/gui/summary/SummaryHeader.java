@@ -34,16 +34,13 @@ class SummaryHeader extends ParentWidget<SummaryHeader> {
 
         child(
             FlowchartFlow.row(panel)
-                .fullWidth()
-                .fullHeight()
+                .full()
                 .childPadding(PAD)
                 .mainAxisAlignment(Alignment.MainAxis.SPACE_BETWEEN)
-                .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                 .child(
                     FlowchartFlow.row(panel)
                         .coverChildren()
                         .childPadding(PAD)
-                        .crossAxisAlignment(Alignment.CrossAxis.CENTER)
                         .child(new FlowchartList.Grip(sectionsList, accentColor(section), textColor(section)))
                         .child(new TextWidget<>(headerTitle(section, data)).color(textColor(section))))
                 .child(foldToggle(data, section)));
