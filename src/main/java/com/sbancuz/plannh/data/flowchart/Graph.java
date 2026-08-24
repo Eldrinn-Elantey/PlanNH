@@ -1,19 +1,15 @@
 package com.sbancuz.plannh.data.flowchart;
 
 import java.util.Collection;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.UUID;
 
-import com.sbancuz.plannh.data.flowchart.Summary.SummarySection;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceMode;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceView;
-import com.sbancuz.plannh.data.flowchart.balancer.Balancer;
 import com.sbancuz.plannh.data.flowchart.balancer.ChoiceKey;
-import com.sbancuz.plannh.data.flowchart.balancer.alternatives.Alternatives;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -50,37 +46,31 @@ public class Graph {
 
     @Getter
     private BalanceMode balanceMode = BalanceMode.AUTO;
-    @Getter
-    private boolean opsMode;
 
     /**
      * Per-graph undo/redo stack, transient because snapshots are content-encoded and never stored.
      */
     public final transient UndoHistory undoHistory = new UndoHistory();
 
-    /**
-     * Which summary sections the user has folded away in this graph's panel.
-     */
-    public transient EnumSet<SummarySection> collapsedSummarySections = defaultSummaryFolds();
-
-    /**
-     * Which of the equally-workable answers the user picked, or null for the solver's own. Applied
-     * as a preference, never as a constraint: a key that no longer fits the chart is dropped with a
-     * note rather than allowed to degrade it.
-     */
     @Getter
-    private ChoiceKey excessChoice;
+    @Setter
+    private Summary summary = new Summary();
 
-    private BalanceResult balance = null;
-    private Summary summary = null;
     /**
-     * The two display views, built on first ask after a solve rather than with it: the canvas wants
-     * the boundary every frame and never the choices, the summary panel wants the reverse.
+     * The display view, built on first ask after a solve rather than with it: the canvas wants the
+     * boundary every frame and never the choices, which the summary reads straight from the solve.
      */
     private List<BalanceView.Boundary> boundaryView = null;
-    private BalanceView.Choices choicesView = null;
 
-    private boolean dirty = true;
+    /**
+     * Monotonic counter bumped on every mutation; derived caches (the solve, the summary, the
+     * boundary view) each compare against it to know when they are stale. Transient because
+     * a loaded plan starts cold and re-derives everything on first ask.
+     */
+    private transient long version = 0;
+
+    /** The graph version the solve caches above were built from. */
+    private transient long solvedAt = -1;
 
     public Graph() {
         this.name = "";
@@ -90,60 +80,51 @@ public class Graph {
         this.name = name;
     }
 
-    public static EnumSet<SummarySection> defaultSummaryFolds() {
-        return EnumSet.of(SummarySection.MACHINE_COUNTS, SummarySection.STATISTICS, SummarySection.HELP);
+    public long version() {
+        return version;
     }
 
+    private void bumpVersion() {
+        version++;
+    }
+
+    /**
+     * @deprecated Mutations bump the graph version internally; callers that change solve-relevant
+     *             state should route through the graph's own methods instead. This is closely related to the maps at
+     *             the beginning which should have proper accessors
+     */
+    @Deprecated
     public void markDirty() {
-        dirty = true;
+        bumpVersion();
+    }
+
+    public ChoiceKey getExcessChoice() {
+        return summary.excessChoice();
     }
 
     public void setExcessChoice(final ChoiceKey choice) {
-        excessChoice = choice;
-        markDirty();
+        summary.excessChoice(choice);
+        bumpVersion();
     }
 
     public void setBalanceMode(final BalanceMode mode) {
         balanceMode = mode;
-        markDirty();
-    }
-
-    public void setOpsMode(final boolean opsMode) {
-        this.opsMode = opsMode;
-        markDirty();
+        bumpVersion();
     }
 
     public void removeNode(final UUID id) {
         nodes.remove(id);
         edges.values()
             .removeIf(e -> e.sourceNodeId.equals(id) || e.targetNodeId.equals(id));
-        markDirty();
+        bumpVersion();
     }
 
     public BalanceResult balance() {
-        if (dirty) {
-            balance = Balancer.balance(this, balanceMode, opsMode);
-            summary = Summary.compute(balance, this, opsMode);
-            boundaryView = null;
-            choicesView = null;
-            dirty = false;
+        if (solvedAt != version) {
+            summary.recompute(this);
+            solvedAt = version;
         }
-        return balance;
-    }
-
-    /**
-     * Every answer that balances this chart as well as the one on screen. Produced by the same pass
-     * that produced the balance, so asking costs nothing beyond the solve that already happened.
-     */
-    public Alternatives alternatives() {
-        final BalanceResult balance = balance();
-        return balance instanceof final BalanceResult.Solved solved ? solved.alternatives()
-            : new Alternatives(null, List.of(), true, List.of());
-    }
-
-    public Summary summary() {
-        balance(); // ensure up-to-date
-        return summary;
+        return summary.balance();
     }
 
     /**
@@ -156,20 +137,13 @@ public class Graph {
         return boundaryView;
     }
 
-    /** The equally-workable answers, grouped by the question each one answers. Cached as above. */
-    public BalanceView.Choices choices() {
-        balance();
-        if (choicesView == null) choicesView = BalanceView.choices(this);
-        return choicesView;
-    }
-
     public Collection<Node> getNodes() {
         return nodes.values();
     }
 
     public void addNode(final Node node) {
         nodes.put(node.id, node);
-        markDirty();
+        bumpVersion();
     }
 
     public Collection<Edge> getEdges() {
@@ -185,12 +159,12 @@ public class Graph {
                     && e.targetNodeId.equals(edge.targetNodeId)
                     && e.targetInputIndex == edge.targetInputIndex);
         edges.put(edge.id, edge);
-        markDirty();
+        bumpVersion();
     }
 
     public void removeEdge(final UUID id) {
         edges.remove(id);
-        markDirty();
+        bumpVersion();
     }
 
     /**
