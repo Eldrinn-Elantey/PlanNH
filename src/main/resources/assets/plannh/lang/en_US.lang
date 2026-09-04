@@ -113,6 +113,11 @@ plannh.share.copy_to_clipboard=Plan exported to clipboard
 plannh.share.copy_from_clipboard=Plan imported from clipboard
 
 ## GUI
+## GUI - Groups
+plannh.gui.group.machine_sharing=Toggle Machine Sharing: sum the machine counts of the recipes in this group
+plannh.gui.group.machine_types=%d types
+plannh.gui.group.machine_capacity=Machines in the shared pool; 0 for as many as it takes
+
 ## GUI - Balancer
 plannh.gui.balancer_mode=Mode: %s
 plannh.gui.balancer_mode.none=Normal

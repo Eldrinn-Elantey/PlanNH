@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import net.minecraft.util.StatCollector;
+
 import com.cleanroommc.modularui.api.IPanelHandler;
 import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.drawable.DynamicDrawable;
@@ -24,6 +26,7 @@ import com.cleanroommc.modularui.widgets.CycleButtonWidget;
 import com.cleanroommc.modularui.widgets.TextWidget;
 import com.cleanroommc.modularui.widgets.ToggleButton;
 import com.cleanroommc.modularui.widgets.layout.Flow;
+import com.sbancuz.plannh.api.PlanAPI;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Group;
 import com.sbancuz.plannh.data.flowchart.Node;
@@ -76,12 +79,16 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
             .reverseLayout();
 
         buttonRow.child(new CloseButtonWidget(this))
-            .child(
-                new ToggleButton().value(new BoolValue.Dynamic(data::isMachineSharing, data::setMachineSharing))
-                    .overlay(
-                        IKey.str("MS")
-                            .color(Color.WHITE.main))
-                    .addTooltipLine("Toggle Machine Sharing: sum the machine counts of the recipes in this group"))
+            .child(new ToggleButton().value(new BoolValue.Dynamic(data::isMachineSharing, val -> {
+                data.setMachineSharing(val);
+                resolve();
+            }))
+                .overlay(
+                    IKey.str("MS")
+                        .color(Color.WHITE.main))
+                .addTooltipLine(IKey.lang("plannh.gui.group.machine_sharing")))
+            .child(capacityButton("+", 1))
+            .child(capacityButton("-", -1))
             .child(new ToggleButton().value(new BoolValue.Dynamic(data::isCoverChildren, val -> {
                 data.setCoverChildren(val);
                 if (val) canvas.fitGroupToChildren(data);
@@ -117,6 +124,31 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
         mainColumn.child(areaWidget);
 
         child(mainColumn);
+    }
+
+    /**
+     * Steps the pool's capacity, floored at zero, which is the group's "as many machines as it
+     * takes" and the state every chart starts in. The capacity is a solve input, so a step is an
+     * edit like any other: recorded for undo and version-bumped so the chart re-balances under it.
+     */
+    private ButtonWidget<?> capacityButton(final String label, final int step) {
+        return new ButtonWidget<>().overlay(
+            IKey.str(label)
+                .color(Color.WHITE.main))
+            .onMousePressed(_ -> {
+                PlanAPI.recordEdit(canvas.getGraph(), () -> {
+                    getData().setMachineCapacity(Math.max(0, getData().getMachineCapacity() + step));
+                    resolve();
+                });
+                return true;
+            })
+            .addTooltipLine(IKey.lang("plannh.gui.group.machine_capacity"));
+    }
+
+    /** Marks the chart for a fresh solve; a pool's capacity and membership are model inputs. */
+    private void resolve() {
+        canvas.getGraph()
+            .markDirty();
     }
 
     /**
@@ -161,10 +193,12 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
         return new TextWidget<>(IKey.dynamic(() -> {
             final List<Map.Entry<String, Double>> load = machineLoad();
             if (load.isEmpty()) return "";
-            if (load.size() == 1) return "×" + GuiHelper.formatCount(
+            final int capacity = getData().getMachineCapacity();
+            final String used = load.size() == 1 ? "×" + GuiHelper.formatCount(
                 load.get(0)
-                    .getValue());
-            return load.size() + " types";
+                    .getValue())
+                : StatCollector.translateToLocalFormatted("plannh.gui.group.machine_types", load.size());
+            return capacity > 0 ? used + " / " + capacity : used;
         })).color(PlannhColors.SUMMARY_TEXT_MUTED.getColor())
             .textAlign(Alignment.CenterRight)
             .tooltipPos(RichTooltip.Pos.BELOW)
