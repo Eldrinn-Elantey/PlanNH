@@ -2,7 +2,9 @@ package com.sbancuz.plannh.gui;
 
 import static com.sbancuz.plannh.data.flowchart.Group.GROUP_MIN_W;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -11,15 +13,22 @@ import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.drawable.DynamicDrawable;
 import com.cleanroommc.modularui.drawable.GuiTextures;
 import com.cleanroommc.modularui.drawable.Rectangle;
+import com.cleanroommc.modularui.screen.RichTooltip;
 import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
+import com.cleanroommc.modularui.utils.Alignment;
 import com.cleanroommc.modularui.utils.Color;
 import com.cleanroommc.modularui.value.BoolValue;
 import com.cleanroommc.modularui.widgets.ButtonWidget;
 import com.cleanroommc.modularui.widgets.ColorPickerDialog;
 import com.cleanroommc.modularui.widgets.CycleButtonWidget;
+import com.cleanroommc.modularui.widgets.TextWidget;
 import com.cleanroommc.modularui.widgets.ToggleButton;
 import com.cleanroommc.modularui.widgets.layout.Flow;
+import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Group;
+import com.sbancuz.plannh.data.flowchart.Node;
+import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
+import com.sbancuz.plannh.data.flowchart.balancer.Balancer;
 
 import lombok.Getter;
 
@@ -67,6 +76,12 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
             .reverseLayout();
 
         buttonRow.child(new CloseButtonWidget(this))
+            .child(
+                new ToggleButton().value(new BoolValue.Dynamic(data::isMachineSharing, data::setMachineSharing))
+                    .overlay(
+                        IKey.str("MS")
+                            .color(Color.WHITE.main))
+                    .addTooltipLine("Toggle Machine Sharing: sum the machine counts of the recipes in this group"))
             .child(new ToggleButton().value(new BoolValue.Dynamic(data::isCoverChildren, val -> {
                 data.setCoverChildren(val);
                 if (val) canvas.fitGroupToChildren(data);
@@ -95,12 +110,71 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
                         if (was && !val) canvas.rebuildNodeWidgets();
                     })));
 
+        topRow.child(loadLabel());
         topRow.child(buttonRow);
 
         mainColumn.child(topRow);
         mainColumn.child(areaWidget);
 
         child(mainColumn);
+    }
+
+    /**
+     * The group's machine load: for every machine type inside the frame, the counts of its nodes
+     * summed. A node's count is already machine-time - a recipe filling a third of a machine reads
+     * 0.33 - so the sum is what one type has to be able to run at once if the group's recipes share
+     * hardware. Nothing here constrains the solve; the group is the player's own statement that
+     * these recipes run on the same machines, and the header just adds up what the nodes already
+     * say. Sorted by load so the busiest type leads, name breaking ties.
+     */
+    private List<Map.Entry<String, Double>> machineLoad() {
+        if (!getData().isMachineSharing()) return List.of();
+        final Graph graph = canvas.getGraph();
+        final BalanceResult balance = graph.balance();
+        if (balance == null) return List.of();
+        final Map<String, Double> byMachine = new HashMap<>();
+        for (final UUID nodeId : getData().getNodeIds()) {
+            final Node node = graph.nodes.get(nodeId);
+            if (node == null) continue;
+            final Balancer.NodeBalance nb = balance.nodeBalances()
+                .get(nodeId);
+            if (nb == null || nb.operations() <= 0) continue;
+            byMachine.merge(node.machineName, nb.operations(), Double::sum);
+        }
+        final List<Map.Entry<String, Double>> out = new ArrayList<>(byMachine.entrySet());
+        out.sort(
+            Map.Entry.<String, Double>comparingByValue()
+                .reversed()
+                .thenComparing(Map.Entry.comparingByKey()));
+        return out;
+    }
+
+    /**
+     * The load next to the group's name: the count alone for a single machine type, a type count
+     * when there are several. Machine names are as long as GregTech feels like, and the row already
+     * holds the name field and the buttons, so the header carries the number and the names live in
+     * the tooltip, which is pinned below the row - the default position sits beside the widget and
+     * trims every line to whatever screen width is left there. Empty when the group does not claim
+     * machine sharing or holds no solved nodes, which collapses the widget away.
+     */
+    private TextWidget<?> loadLabel() {
+        return new TextWidget<>(IKey.dynamic(() -> {
+            final List<Map.Entry<String, Double>> load = machineLoad();
+            if (load.isEmpty()) return "";
+            if (load.size() == 1) return "×" + GuiHelper.formatCount(
+                load.get(0)
+                    .getValue());
+            return load.size() + " types";
+        })).color(PlannhColors.SUMMARY_TEXT_MUTED.getColor())
+            .textAlign(Alignment.CenterRight)
+            .tooltipPos(RichTooltip.Pos.BELOW)
+            .tooltipAutoUpdate(true)
+            .tooltipDynamic(tooltip -> {
+                for (final Map.Entry<String, Double> entry : machineLoad()) {
+                    tooltip.add("×" + GuiHelper.formatCount(entry.getValue()) + " " + entry.getKey())
+                        .newLine();
+                }
+            });
     }
 
     @Override

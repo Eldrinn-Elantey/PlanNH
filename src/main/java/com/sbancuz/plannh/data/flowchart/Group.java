@@ -29,6 +29,12 @@ public class Group extends GraphData {
     private boolean clampNodes;
     private boolean coverChildren;
     /**
+     * The player's statement that the recipes framed here run on the same machines, so the header
+     * may add their machine counts up per type. Purely a display claim - the balancer never sees
+     * it, and an old chart reads back as false, which is the behaviour it already had.
+     */
+    private boolean machineSharing;
+    /**
      * Sorted for the same reason the graph's own maps are, and for one more: Gson builds a
      * SortedMap field as a TreeMap but a Map keyed on anything but String as an insertion-ordered
      * LinkedTreeMap, so the declared type here is what makes a reloaded group iterate like a
