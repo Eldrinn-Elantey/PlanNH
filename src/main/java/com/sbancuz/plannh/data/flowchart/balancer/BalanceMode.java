@@ -1,5 +1,6 @@
 package com.sbancuz.plannh.data.flowchart.balancer;
 
+import java.util.Locale;
 import java.util.Set;
 
 import net.minecraft.util.StatCollector;
@@ -72,6 +73,6 @@ public enum BalanceMode {
     public String displayName() {
         return StatCollector.translateToLocal(
             "plannh.gui.balancer_mode." + this.name()
-                .toLowerCase());
+                .toLowerCase(Locale.ROOT));
     }
 }

@@ -1,5 +1,7 @@
 package com.sbancuz.plannh.gui.summary;
 
+import java.util.Locale;
+
 import com.cleanroommc.modularui.api.GuiAxis;
 import com.cleanroommc.modularui.api.drawable.IKey;
 import com.cleanroommc.modularui.drawable.Rectangle;
@@ -22,7 +24,8 @@ final class TotalsRow extends FlowchartFlow {
     TotalsRow(final FlowchartWidget<?, ?> panel, final Summary.Line.Totals totals, final Plan.Mode mode) {
         super(GuiAxis.X, panel);
         final String ops = GuiHelper.formatCount(totals.operations());
-        final String sec = String.format("%.2f", (double) totals.durationTicks() / GuiHelper.TICKS_PER_SECOND);
+        final String sec = String
+            .format(Locale.ROOT, "%.2f", (double) totals.durationTicks() / GuiHelper.TICKS_PER_SECOND);
         final IKey text = mode == Plan.Mode.THROUGHPUT ? IKey.lang("plannh.summary.totals.throughput", ops, sec)
             : IKey.lang("plannh.summary.totals.cycles", ops, totals.durationTicks(), sec);
         fullWidth().coverChildrenHeight(SummaryBody.LINE_H)
