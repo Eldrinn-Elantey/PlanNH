@@ -29,19 +29,6 @@ public class Group extends GraphData {
     private boolean clampNodes;
     private boolean coverChildren;
     /**
-     * The player's statement that the recipes framed here run on the same machines, so their
-     * machine counts add up per type in the header. An old chart reads back as false, which is the
-     * behaviour it already had.
-     */
-    private boolean machineSharing;
-    /**
-     * How many machines the shared pool is allowed to be, or 0 for as many as it takes. This is
-     * the only part of a sharing group the solver reads: a positive capacity caps the group's
-     * summed machine time, so the chart is balanced to fit the hardware that exists instead of
-     * being measured after the fact. Ignored while {@link #machineSharing} is off.
-     */
-    private int machineCapacity;
-    /**
      * Sorted for the same reason the graph's own maps are, and for one more: Gson builds a
      * SortedMap field as a TreeMap but a Map keyed on anything but String as an insertion-ordered
      * LinkedTreeMap, so the declared type here is what makes a reloaded group iterate like a

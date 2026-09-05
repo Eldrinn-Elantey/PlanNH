@@ -12,6 +12,7 @@ import com.sbancuz.plannh.data.MachineConfig;
 import com.sbancuz.plannh.data.flowchart.Edge;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Group;
+import com.sbancuz.plannh.data.flowchart.MachineGroup;
 import com.sbancuz.plannh.data.flowchart.Node;
 
 /**
@@ -164,14 +165,14 @@ public final class ModelData {
      */
     private void buildPools(final Graph graph) {
         for (final Group group : graph.getGroups()) {
-            if (!group.isMachineSharing() || group.getMachineCapacity() <= 0) continue;
+            if (!(group instanceof final MachineGroup machineGroup) || machineGroup.getMachineCapacity() <= 0) continue;
             final List<Integer> members = new ArrayList<>();
             for (final UUID nodeId : group.getNodeIds()) {
                 final Integer m = machineIndex.get(nodeId);
                 if (m != null) members.add(m);
             }
             if (members.isEmpty()) continue;
-            pools.add(new Pool(List.copyOf(members), group.getMachineCapacity()));
+            pools.add(new Pool(List.copyOf(members), machineGroup.getMachineCapacity()));
         }
     }
 

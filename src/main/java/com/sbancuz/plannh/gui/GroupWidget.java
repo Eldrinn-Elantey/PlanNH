@@ -2,13 +2,9 @@ package com.sbancuz.plannh.gui;
 
 import static com.sbancuz.plannh.data.flowchart.Group.GROUP_MIN_W;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import net.minecraft.util.StatCollector;
 
 import com.cleanroommc.modularui.api.IPanelHandler;
 import com.cleanroommc.modularui.api.drawable.IKey;
@@ -29,6 +25,7 @@ import com.cleanroommc.modularui.widgets.layout.Flow;
 import com.sbancuz.plannh.api.PlanAPI;
 import com.sbancuz.plannh.data.flowchart.Graph;
 import com.sbancuz.plannh.data.flowchart.Group;
+import com.sbancuz.plannh.data.flowchart.MachineGroup;
 import com.sbancuz.plannh.data.flowchart.Node;
 import com.sbancuz.plannh.data.flowchart.balancer.BalanceResult;
 import com.sbancuz.plannh.data.flowchart.balancer.Balancer;
@@ -46,9 +43,10 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
 
         coverChildren(GROUP_MIN_W, 0);
 
+        final int borderWidth = data instanceof MachineGroup ? 4 : 2;
         background(
             new DynamicDrawable(
-                () -> new Rectangle().hollow(2)
+                () -> new Rectangle().hollow(borderWidth)
                     .color(data.getColor())));
 
         data.getChildren()
@@ -71,6 +69,14 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
             .fullWidth()
             .background(new DynamicDrawable(() -> new Rectangle().color(data.getColor())));
 
+        // The badge, and the doubled border below it, are what tell a machine group from an
+        // ordinary one at a glance: the two behave differently and are easy to mistake otherwise.
+        if (data instanceof MachineGroup) {
+            topRow.child(
+                new TextWidget<>(IKey.lang("plannh.gui.group.machine_badge")).color(Color.WHITE.main)
+                    .textAlign(Alignment.CenterLeft)
+                    .addTooltipLine(IKey.lang("plannh.gui.group.machine_group_tooltip")));
+        }
         topRow.child(new HeaderTextWidget(this, data::getColor));
 
         Flow buttonRow = FlowchartFlow.row(this)
@@ -78,18 +84,12 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
             .childPadding(2)
             .reverseLayout();
 
-        buttonRow.child(new CloseButtonWidget(this))
-            .child(new ToggleButton().value(new BoolValue.Dynamic(data::isMachineSharing, val -> {
-                data.setMachineSharing(val);
-                resolve();
-            }))
-                .overlay(
-                    IKey.str("MS")
-                        .color(Color.WHITE.main))
-                .addTooltipLine(IKey.lang("plannh.gui.group.machine_sharing")))
-            .child(capacityButton("+", 1))
-            .child(capacityButton("-", -1))
-            .child(new ToggleButton().value(new BoolValue.Dynamic(data::isCoverChildren, val -> {
+        buttonRow.child(new CloseButtonWidget(this));
+        if (data instanceof final MachineGroup machineGroup) {
+            buttonRow.child(capacityButton(machineGroup, "+", 1))
+                .child(capacityButton(machineGroup, "-", -1));
+        }
+        buttonRow.child(new ToggleButton().value(new BoolValue.Dynamic(data::isCoverChildren, val -> {
                 data.setCoverChildren(val);
                 if (val) canvas.fitGroupToChildren(data);
                 areaWidget.configureCoverChildren();
@@ -117,7 +117,7 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
                         if (was && !val) canvas.rebuildNodeWidgets();
                     })));
 
-        topRow.child(loadLabel());
+        if (data instanceof final MachineGroup machineGroup) topRow.child(loadLabel(machineGroup));
         topRow.child(buttonRow);
 
         mainColumn.child(topRow);
@@ -131,13 +131,13 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
      * takes" and the state every chart starts in. The capacity is a solve input, so a step is an
      * edit like any other: recorded for undo and version-bumped so the chart re-balances under it.
      */
-    private ButtonWidget<?> capacityButton(final String label, final int step) {
+    private ButtonWidget<?> capacityButton(final MachineGroup group, final String label, final int step) {
         return new ButtonWidget<>().overlay(
             IKey.str(label)
                 .color(Color.WHITE.main))
             .onMousePressed(_ -> {
                 PlanAPI.recordEdit(canvas.getGraph(), () -> {
-                    getData().setMachineCapacity(Math.max(0, getData().getMachineCapacity() + step));
+                    group.setMachineCapacity(Math.max(0, group.getMachineCapacity() + step));
                     resolve();
                 });
                 return true;
@@ -152,62 +152,58 @@ public final class GroupWidget extends GroupableWidget<GroupWidget, Group> {
     }
 
     /**
-     * The group's machine load: for every machine type inside the frame, the counts of its nodes
-     * summed. A node's count is already machine-time - a recipe filling a third of a machine reads
-     * 0.33 - so the sum is what one type has to be able to run at once if the group's recipes share
-     * hardware. Nothing here constrains the solve; the group is the player's own statement that
-     * these recipes run on the same machines, and the header just adds up what the nodes already
-     * say. Sorted by load so the busiest type leads, name breaking ties.
+     * The pool's load: the machine counts of the framed nodes, summed. A node's count is already
+     * machine time - a recipe filling a third of a machine reads 0.33 - so the sum is how much of
+     * the one machine the group's recipes ask for between them. Every member runs the same handler
+     * under the same settings, which is what makes the sum a single machine's worth of work rather
+     * than an addition of unlike things.
      */
-    private List<Map.Entry<String, Double>> machineLoad() {
-        if (!getData().isMachineSharing()) return List.of();
+    private double machineLoad() {
         final Graph graph = canvas.getGraph();
         final BalanceResult balance = graph.balance();
-        if (balance == null) return List.of();
-        final Map<String, Double> byMachine = new HashMap<>();
+        if (balance == null) return 0;
+        double load = 0;
         for (final UUID nodeId : getData().getNodeIds()) {
-            final Node node = graph.nodes.get(nodeId);
-            if (node == null) continue;
             final Balancer.NodeBalance nb = balance.nodeBalances()
                 .get(nodeId);
             if (nb == null || nb.operations() <= 0) continue;
-            byMachine.merge(node.machineName, nb.operations(), Double::sum);
+            load += nb.operations();
         }
-        final List<Map.Entry<String, Double>> out = new ArrayList<>(byMachine.entrySet());
-        out.sort(
-            Map.Entry.<String, Double>comparingByValue()
-                .reversed()
-                .thenComparing(Map.Entry.comparingByKey()));
-        return out;
+        return load;
+    }
+
+    /** The machine the group stands for, from any member; empty until a node is framed. */
+    private String machineName() {
+        final Graph graph = canvas.getGraph();
+        for (final UUID nodeId : getData().getNodeIds()) {
+            final Node node = graph.nodes.get(nodeId);
+            if (node != null) return node.machineName;
+        }
+        return "";
     }
 
     /**
-     * The load next to the group's name: the count alone for a single machine type, a type count
-     * when there are several. Machine names are as long as GregTech feels like, and the row already
-     * holds the name field and the buttons, so the header carries the number and the names live in
-     * the tooltip, which is pinned below the row - the default position sits beside the widget and
-     * trims every line to whatever screen width is left there. Empty when the group does not claim
-     * machine sharing or holds no solved nodes, which collapses the widget away.
+     * The load next to the group's name, against the capacity when one is set. Machine names are as
+     * long as GregTech feels like and the row already holds the name field and the buttons, so the
+     * header carries the number and the machine is named in the tooltip, which is pinned below the
+     * row - the default position sits beside the widget and trims to whatever screen width is left
+     * there. Empty for a group with no solved nodes, which collapses the widget away.
      */
-    private TextWidget<?> loadLabel() {
+    private TextWidget<?> loadLabel(final MachineGroup group) {
         return new TextWidget<>(IKey.dynamic(() -> {
-            final List<Map.Entry<String, Double>> load = machineLoad();
-            if (load.isEmpty()) return "";
-            final int capacity = getData().getMachineCapacity();
-            final String used = load.size() == 1 ? "×" + GuiHelper.formatCount(
-                load.get(0)
-                    .getValue())
-                : StatCollector.translateToLocalFormatted("plannh.gui.group.machine_types", load.size());
-            return capacity > 0 ? used + " / " + capacity : used;
+            final double load = machineLoad();
+            if (load <= 0) return "";
+            final String used = "×" + GuiHelper.formatCount(load);
+            return group.getMachineCapacity() > 0 ? used + " / " + group.getMachineCapacity() : used;
         })).color(PlannhColors.SUMMARY_TEXT_MUTED.getColor())
             .textAlign(Alignment.CenterRight)
             .tooltipPos(RichTooltip.Pos.BELOW)
             .tooltipAutoUpdate(true)
             .tooltipDynamic(tooltip -> {
-                for (final Map.Entry<String, Double> entry : machineLoad()) {
-                    tooltip.add("×" + GuiHelper.formatCount(entry.getValue()) + " " + entry.getKey())
-                        .newLine();
-                }
+                final double load = machineLoad();
+                if (load <= 0) return;
+                tooltip.add("×" + GuiHelper.formatCount(load) + " " + machineName())
+                    .newLine();
             });
     }
 
